@@ -1,4 +1,5 @@
-import { type Peer } from '../core/types/Peer';
+import type { ListenerConfig } from '../core/types/config/Listener';
+import { type Peer } from '../core/types/config/Peer';
 import yaml from 'yaml';
 
 /**
@@ -12,6 +13,7 @@ export type OracleConfigOptions = {
   host: string;
   apiPort: number;
   primary: boolean;
+  listener: ListenerConfig;
   plugins: Record<string, Record<string, Record<string, unknown>>>;
   listeners: Record<string, Record<string, Record<string, unknown>>>;
   peers?: Peer[];
@@ -31,6 +33,7 @@ export class OracleConfig {
   host: string;
   apiPort: number;
   primary: boolean;
+  listener: ListenerConfig;
   plugins: Record<string, Record<string, Record<string, unknown>>>;
   listeners: Record<string, Record<string, Record<string, unknown>>>;
   peers: Peer[];
@@ -47,6 +50,7 @@ export class OracleConfig {
     this.host = options.host;
     this.apiPort = options.apiPort;
     this.primary = options.primary;
+    this.listener = options.listener;
     this.plugins = options.plugins;
     this.listeners = options.listeners;
     this.peers = options.peers || [];

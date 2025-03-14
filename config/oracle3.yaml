@@ -21,15 +21,15 @@ listeners:
 
 plugins:
   solana-mega-forwarder:
-    solanaRpcUrl: "http://localhost:8899"
-    solanaProgramId: "9DB7JmEH2xksZK265x8ucZH2yYh2Uh4PzcF9CkgaPxQW"
+    solanaRpcUrl: "https://api.devnet.solana.com"
+    solanaProgramId: "yteDZqmquhCJwDKumf35uPqcknDn87xgcDLqdxjAigq"
     directoryNodeUrlPool: "https://node0.testnet.chromia.com:7740"
-    blockchainRid: "136B54211863D0CC6239E002F6726940CB3D849C279C0B14459A00963F6B3CEC"
+    blockchainRid: "C5C735F8F9001F44A6CEBCF0B23D5D4705B2EF98F28672CACA826FD53EC5E9E6"
   solana-minter:
     solanaRpcUrl: "http://localhost:8899"
     solanaProgramId: "9DB7JmEH2xksZK265x8ucZH2yYh2Uh4PzcF9CkgaPxQW"
     nodeUrlPool: "http://localhost:7740"
-    blockchainRid: "7EB45B6E0579D96DAB6854691763942B1F73E75832974F637AE495CFA69FE502"
+    blockchainRid: "https://fragrant-warmhearted-emerald.solana-devnet.quiknode.pro/e657c7dd3bf3c88f9b814a2b3d9319b91a826ce3"
 
 # Peer Configuration
 peers:

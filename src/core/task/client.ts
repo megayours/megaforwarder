@@ -1,4 +1,4 @@
-import type { Peer } from "../types/Peer";
+import type { Peer } from "../types/config/Peer";
 import type { ValidateRequest, ValidateResponse } from "../types/requests/ValidateRequest";
 import { decode, encode } from "../../util/encoder";
 import type { ProtocolPrepareResult, ValidateResult } from "../types/Protocol";

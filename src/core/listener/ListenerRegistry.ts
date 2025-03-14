@@ -1,5 +1,5 @@
 import type { IListener } from "../interfaces/IListener";
-
+import config from "../../config";
 export class ListenerRegistry {
   private static instance: ListenerRegistry;
   private listeners: IListener[] = [];
@@ -25,7 +25,7 @@ export class ListenerRegistry {
       for (const listener of this.listeners) {
         await listener.run();
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, config.listener.intervalMs));
     }
   }
 }

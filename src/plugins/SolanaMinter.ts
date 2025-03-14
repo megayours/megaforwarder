@@ -207,8 +207,9 @@ export class SolanaMinter extends Plugin<SolanaMegaForwarderInput, MintData, GTX
     logger.debug(`Metadata`, { metadata, amount });
 
     const emptyGtx = gtx.emptyGtx(this._megadataBlockchainRid);
-    const tx = gtx.addTransactionToGtx("solana.register_token", [slot, txSignature, tokenAddress, decimals], emptyGtx);
-    tx.signers = [Buffer.from(config.publicKey, 'hex'), ...input.map((i) => Buffer.from(i.pubkey, 'hex'))];
+    // Adding empty array to args to make it a valid RawGtxBody with no properties since we don't receive it yet
+    const tx = gtx.addTransactionToGtx("solana.register_token", [slot, txSignature, tokenAddress, decimals, "{}"], emptyGtx);
+    tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
     return { status: "success", data: tx };
   }
 
@@ -217,7 +218,7 @@ export class SolanaMinter extends Plugin<SolanaMegaForwarderInput, MintData, GTX
 
     if (gtx.operations.length !== 1) return { status: "failure" };
     if (gtx.operations[0]?.opName !== "solana.register_token") return { status: "failure" };
-    if (gtx.operations[0]?.args.length !== 4) return { status: "failure" };
+    if (gtx.operations[0]?.args.length !== 5) return { status: "failure" };
 
     const [slot, txSignature, tokenAddress, decimals] = gtx.operations[0].args;
     if (slot !== preparedData.slot) return { status: "failure" };
@@ -225,6 +226,7 @@ export class SolanaMinter extends Plugin<SolanaMegaForwarderInput, MintData, GTX
     if (tokenAddress !== preparedData.tokenAddress) return { status: "failure" };
     if (decimals !== preparedData.decimals) return { status: "failure" };
 
+    // Adding empty array to args to make it a valid RawGtxBody with no properties since we don't receive it yet
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);

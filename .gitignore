@@ -1,3 +1,10 @@
+# production config
+config/config.prod.yml
+docker-compose.prod.yml
+
+# solana
+test-ledger
+
 # dependencies (bun install)
 node_modules
 

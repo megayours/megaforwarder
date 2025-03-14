@@ -3,9 +3,9 @@ import type { IListener } from "../core/interfaces/IListener";
 import { Task } from "../core/task/Task";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { Listener } from "../core/listener/Listener";
-import { SolanaMinter } from "../plugins/SolanaMinter";
 import { SolanaMegaForwarder } from "../plugins/SolanaMegaForwarder";
 import { logger } from "../util/monitoring";
+import { createClient } from "postchain-client";
 
 const BLOCK_HEIGHT_INCREMENT = 100;
 
@@ -13,8 +13,9 @@ export class SolanaListener extends Listener implements IListener {
   private readonly _programId: string;
   private readonly _cache: Cache;
   private readonly _rpcUrl: string;
-
-  private _currentBlockHeight: number = 0;
+  private readonly _blockchainRid: string;
+  private readonly _directoryNodeUrlPool: string[];
+  private _currentBlockHeight: number = -1;
   private _programPubkey: PublicKey | null = null;
 
   constructor() {
@@ -23,6 +24,19 @@ export class SolanaListener extends Listener implements IListener {
     this._cache = createCache({ ttl: this.config["cacheTtlMs"] as number });
     this._programId = this.config["programId"] as string;
     this._rpcUrl = this.config["rpcUrl"] as string;
+    this._directoryNodeUrlPool = (this.config["directoryNodeUrlPool"] as string)?.split(',') ?? [];
+    this._blockchainRid = this.config["blockchainRid"] as string;
+  }
+
+  private async getSlot(): Promise<number> {
+    const client = await createClient({
+      directoryNodeUrlPool: this._directoryNodeUrlPool,
+      blockchainRid: this._blockchainRid
+    });
+
+    const slot = await client.query<number | null>('solana.get_slot');
+    logger.info(`Starting from indexed slot ${slot}`);
+    return slot ?? 0;
   }
 
   private validateAndSetProgramId(): boolean {
@@ -43,6 +57,10 @@ export class SolanaListener extends Listener implements IListener {
   }
 
   async run(): Promise<void> {
+    if (this._currentBlockHeight === -1) {
+      this._currentBlockHeight = await this.getSlot();
+    }
+
     const connection = new Connection(this._rpcUrl);
     try {
       // Validate program ID if not already validated
@@ -98,25 +116,14 @@ export class SolanaListener extends Listener implements IListener {
         });
         await this._cache.set(sig.signature, tx);
         if (tx) {
-          if (tx.meta?.logMessages) {
-            for (const logMessage of tx.meta.logMessages) {
-              if (logMessage.includes('MEGATX:')) {
-                logger.info(`Processing MegaTX transaction: ${sig.signature}`);
-                const task = new Task(SolanaMegaForwarder.pluginId, { txSignature: sig.signature });
-                await task.start();
-              }
-              if (logMessage.includes('MEGADATA:')) {
-                logger.info(`Processing MegaData transaction: ${sig.signature}`);
-                const task = new Task(SolanaMinter.pluginId, { txSignature: sig.signature });
-                await task.start();
-              }
-            }
+          if (tx.meta?.logMessages?.some(log => log.includes('Operation name:'))) {
+            const task = new Task(SolanaMegaForwarder.pluginId, { txSignature: sig.signature });
+            await task.start();
           }
         }
       }
 
       this._currentBlockHeight = Math.min(currentSlot, this._currentBlockHeight);
-
     } catch (error) {
       console.error('Error in Solana listener:', error);
     }

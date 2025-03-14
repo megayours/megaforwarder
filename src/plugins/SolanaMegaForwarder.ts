@@ -1,4 +1,4 @@
-import { Connection } from "@solana/web3.js";
+import { Connection, type VersionedTransactionResponse } from "@solana/web3.js";
 import bs58 from "bs58";
 import type { PrepareResult, ProcessInput, ProcessResult, ValidateResult } from "../core/types/Protocol";
 import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
@@ -13,11 +13,16 @@ type SolanaMegaForwarderInput = {
 
 type Event = {
   operation: string;
-  args: string[];
+  args: any[];
 }
 
 type SolanaMegaForwarderOutput = {
   status: "success" | "failure";
+}
+
+type TokenRegistration = {
+  address: string;
+  properties: any;
 }
 
 export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event, GTX, SolanaMegaForwarderOutput> {
@@ -37,6 +42,25 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     this._megaYoursBlockchainRid = Buffer.from((this.config["blockchainRid"] as string), "hex");
   }
 
+  handleTokenRegistration(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): PrepareResult<Event> {
+    const { address, properties } = data;
+
+    console.log(`Token Registration`, address, properties);
+
+    return { 
+      status: "success",
+      data: {
+        operation: "solana.register_token", 
+        args: [
+          transaction.slot,
+          signature,
+          address,
+          1,
+          JSON.stringify(properties)
+        ] 
+      } };
+  }
+
   async prepare(input: SolanaMegaForwarderInput): Promise<PrepareResult<Event>> {
     const transaction = await this._connection.getTransaction(input.txSignature, {
       commitment: "confirmed",
@@ -53,54 +77,45 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
       return { status: "failure" }
     }
 
-    const event = logs.find((log) => log.includes('MEGATX:'));
+    // Find signer, operation name and parameter from logs
+    const signerLog = logs.find(log => log.includes('Signer:'));
+    const operationLog = logs.find(log => log.includes('Operation name:'));
+    const paramLog = logs.find(log => log.includes('Parameter:'));
 
-    if (!event) {
+    if (!signerLog || !operationLog || !paramLog) {
       return { status: "failure" }
     }
 
-    // Extract the base58 encoded data
-    const base58Data = event.split('MEGATX:')?.[1]?.trim();
-    if (!base58Data) {
+    // Extract values from logs
+    const operationParts = operationLog.split('Operation name:');
+    const paramParts = paramLog.split('Parameter:');
+
+    if (operationParts.length < 2 || paramParts.length < 2) {
       return { status: "failure" }
     }
-    // Decode from base58
-    const binaryData = bs58.decode(base58Data);
 
-    // Create a buffer reader for manual deserialization
-    const buffer = Buffer.from(binaryData);
-    let offset = 0;
+    const operation = operationParts[1]!.trim();
+    const param = paramParts[1]!.trim();
 
-    // Read operation string
-    const operationLength = buffer.readUInt32LE(offset);
-    offset += 4;
-    const operation = buffer.toString('utf8', offset, offset + operationLength);
-    offset += operationLength;
-
-    // Read args array
-    const argsLength = buffer.readUInt32LE(offset);
-    offset += 4;
-    const args = [];
-
-    for (let i = 0; i < argsLength; i++) {
-      const argLength = buffer.readUInt32LE(offset);
-      offset += 4;
-      const arg = buffer.toString('utf8', offset, offset + argLength);
-      offset += argLength;
-      args.push(arg);
+    if (operation !== 'solana.register_token') {
+      const args = [param];
+      console.log(`Operation`, operation, args);
+      return { status: "success", data: { operation, args } };
+    } else {
+      console.log(`Token Registration`, JSON.parse(param));
+      return this.handleTokenRegistration(input.txSignature, transaction, JSON.parse(param));
     }
-
-    return { status: "success", data: { operation, args } };
   }
 
   async process(input: ProcessInput<Event>[]): Promise<ProcessResult<GTX>> {
     const selectedData = input[0];
+    console.log(`Processing`, selectedData);
     if (!selectedData) return { status: "failure" };
     const { operation, args }: Event = selectedData.data;
 
     const emptyGtx = gtx.emptyGtx(this._megaYoursBlockchainRid);
     const tx = gtx.addTransactionToGtx(operation, args, emptyGtx);
-    tx.signers = [Buffer.from(config.publicKey, 'hex'), ...input.map((i) => Buffer.from(i.pubkey, 'hex'))];
+    tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
     return { status: "success", data: tx };
   }
 
@@ -115,6 +130,8 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     } else {
       gtx.signatures = [signature];
     }
+
+    console.log(`Validated`, gtx);
 
     return { status: "success", data: gtx }
   }

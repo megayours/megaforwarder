@@ -1,0 +1,11 @@
+services:
+  oracle:
+    build: .
+    ports:
+      - "5300:5300"
+      - "5400:5400"
+    volumes:
+      - ./config/oracle1.yaml:/usr/src/app/config/config.yml
+    environment:
+      CONFIG_FILE: /usr/src/app/config/config.yml
+    restart: unless-stopped

@@ -1,6 +1,7 @@
 import { collectDefaultMetrics, Registry } from 'prom-client';
 import winston from 'winston';
 import LokiTransport from 'winston-loki';
+import config from '../config';
 
 // Get environment label from env vars
 const environment = process.env.ENVIRONMENT || 'development';
@@ -9,7 +10,8 @@ const environment = process.env.ENVIRONMENT || 'development';
 export const register = new Registry();
 register.setDefaultLabels({
   environment,
-  service: 'megarouter'
+  service: 'decentralized-oracle',
+  job: config.id
 });
 
 // Enable default metrics collection
@@ -23,7 +25,7 @@ export const logger = winston.createLogger({
     winston.format.json()
   ),
   defaultMeta: { 
-    service: 'megarouter',
+    service: 'decentralized-oracle',
     environment 
   },
   transports: process.env.LOKI_URL ? [
@@ -31,7 +33,7 @@ export const logger = winston.createLogger({
     new LokiTransport({
       host: process.env.LOKI_URL,
       labels: { 
-        job: 'megarouter',
+        job: config.id,
         environment 
       },
       json: true,
