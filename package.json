@@ -1,0 +1,31 @@
+{
+  "name": "decentralized-oracle-v2",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start:oracle1": "CONFIG_FILE=config/oracle1.yaml bun src/index.ts",
+    "start:oracle2": "CONFIG_FILE=config/oracle2.yaml bun src/index.ts",
+    "start:oracle3": "CONFIG_FILE=config/oracle3.yaml bun src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@solana/spl-token": "^0.4.13",
+    "@solana/web3.js": "^1.98.0",
+    "@types/secp256k1": "^4.0.6",
+    "bs58": "^6.0.0",
+    "cache-manager": "^6.4.1",
+    "postchain-client": "^1.21.0",
+    "prom-client": "^15.1.3",
+    "secp256k1": "^5.0.1",
+    "winston": "^3.17.0",
+    "winston-loki": "^6.1.3",
+    "yaml": "^2.7.0"
+  }
+}
