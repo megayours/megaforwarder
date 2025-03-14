@@ -214,8 +214,6 @@ export class SolanaMinter extends Plugin<SolanaMegaForwarderInput, MintData, GTX
   }
 
   async validate(gtx: GTX, preparedData: MintData): Promise<ValidateResult<GTX>> {
-    console.log("Validating", preparedData);
-
     if (gtx.operations.length !== 1) return { status: "failure" };
     if (gtx.operations[0]?.opName !== "solana.register_token") return { status: "failure" };
     if (gtx.operations[0]?.args.length !== 5) return { status: "failure" };

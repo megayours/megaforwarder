@@ -45,7 +45,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
   handleTokenRegistration(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): PrepareResult<Event> {
     const { address, properties } = data;
 
-    console.log(`Token Registration`, address, properties);
+    logger.info(`New token Registration`, address);
 
     return { 
       status: "success",
@@ -99,17 +99,15 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
 
     if (operation !== 'solana.register_token') {
       const args = [param];
-      console.log(`Operation`, operation, args);
+      logger.info(`Misc operation`, operation);
       return { status: "success", data: { operation, args } };
     } else {
-      console.log(`Token Registration`, JSON.parse(param));
       return this.handleTokenRegistration(input.txSignature, transaction, JSON.parse(param));
     }
   }
 
   async process(input: ProcessInput<Event>[]): Promise<ProcessResult<GTX>> {
     const selectedData = input[0];
-    console.log(`Processing`, selectedData);
     if (!selectedData) return { status: "failure" };
     const { operation, args }: Event = selectedData.data;
 
@@ -120,7 +118,6 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
   }
 
   async validate(gtx: GTX, preparedData: Event): Promise<ValidateResult<GTX>> {
-    console.log("Validating", preparedData);
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -130,8 +127,6 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     } else {
       gtx.signatures = [signature];
     }
-
-    console.log(`Validated`, gtx);
 
     return { status: "success", data: gtx }
   }
