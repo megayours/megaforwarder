@@ -13,23 +13,12 @@ peerTimeoutMs: 500
 privateKey: "806c467384be813d598674f495b4f14a85d8edc1b2ec11e3ffc577e3b0937cc0"
 publicKey: "03fa2b4c06e4b94f19035883eefb5352505effa7e598bca010ff52a1211a2a59ca"
 
-listeners:
-  solana-listener:
-    rpcUrl: "http://localhost:8899"
-    programId: "9DB7JmEH2xksZK265x8ucZH2yYh2Uh4PzcF9CkgaPxQW"
-    cacheTtlMs: 86400000
-
 plugins:
   solana-mega-forwarder:
     solanaRpcUrl: "https://api.devnet.solana.com"
     solanaProgramId: "yteDZqmquhCJwDKumf35uPqcknDn87xgcDLqdxjAigq"
     directoryNodeUrlPool: "https://node0.testnet.chromia.com:7740"
     blockchainRid: "C5C735F8F9001F44A6CEBCF0B23D5D4705B2EF98F28672CACA826FD53EC5E9E6"
-  solana-minter:
-    solanaRpcUrl: "http://localhost:8899"
-    solanaProgramId: "9DB7JmEH2xksZK265x8ucZH2yYh2Uh4PzcF9CkgaPxQW"
-    nodeUrlPool: "http://localhost:7740"
-    blockchainRid: "https://fragrant-warmhearted-emerald.solana-devnet.quiknode.pro/e657c7dd3bf3c88f9b814a2b3d9319b91a826ce3"
 
 # Peer Configuration
 peers:

@@ -6,12 +6,10 @@ import taskValidate from "./routes/taskValidate";
 import taskPrepare from "./routes/taskPrepare";
 import { SolanaListener } from "./listeners/SolanaListener";
 import { ListenerRegistry } from "./core/listener/ListenerRegistry";
-import { SolanaMinter } from "./plugins/SolanaMinter";
 import { logger } from "./util/monitoring";
 
 const pluginRegistry = PluginRegistry.getInstance();
 pluginRegistry.register(new SolanaMegaForwarder());
-pluginRegistry.register(new SolanaMinter());
 
 if (config.primary) {
   const listenerHandler = ListenerRegistry.getInstance();

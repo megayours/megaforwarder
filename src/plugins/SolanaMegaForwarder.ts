@@ -55,7 +55,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
           transaction.slot,
           signature,
           address,
-          1,
+          0,
           JSON.stringify(properties)
         ] 
       } };
