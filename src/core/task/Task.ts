@@ -29,7 +29,15 @@ export class Task<T> {
     const peerTimeoutMs = config.peerTimeoutMs;
 
     const prepareResults: { publicKey: string; result: ProtocolPrepareResult<unknown> }[] = [];
-    prepareResults.push({ publicKey: config.publicKey, result: { status: "success", data: result.data, signatureData: null, encodedData: "<PRIMARY>" } });
+    prepareResults.push({
+      publicKey: config.publicKey,
+      result: {
+        status: "success",
+        data: result.data,
+        signatureData: null,
+        encodedData: "<PRIMARY>"
+      }
+    });
 
     // Add ourselves to the list of peers
     const preparePromises = peers.map(async (peer) => {
@@ -106,7 +114,9 @@ export class Task<T> {
     }
 
     // Peers from config that have been selected for validation, excluding ourselves
-    const validationPeers = config.peers.filter((peer) => selectedPeers.includes(peer.publicKey));
+    const validationPeers = selectedPeers
+      .map((peer) => config.peers.find((p) => p.publicKey === peer))
+      .filter((peer) => peer !== undefined);
 
     let data = primaryValidateResult.data;
     for (const peer of validationPeers) {
