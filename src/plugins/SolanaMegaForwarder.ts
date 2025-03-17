@@ -1,5 +1,4 @@
 import { Connection, type VersionedTransactionResponse } from "@solana/web3.js";
-import bs58 from "bs58";
 import type { PrepareResult, ProcessInput, ProcessResult, ValidateResult } from "../core/types/Protocol";
 import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import config from "../config";
@@ -61,6 +60,20 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
       } };
   }
 
+  handleTokenUpdate(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): PrepareResult<Event> {
+    const { address, properties } = data;
+
+    logger.info(`New token Update`, address);
+    
+    return {
+      status: "success",
+      data: {
+        operation: "solana.update_metadata",
+        args: [transaction.slot, signature, address, JSON.stringify(properties)]
+      }
+    }
+  }
+
   async prepare(input: SolanaMegaForwarderInput): Promise<PrepareResult<Event>> {
     const transaction = await this._connection.getTransaction(input.txSignature, {
       commitment: "confirmed",
@@ -97,12 +110,14 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     const operation = operationParts[1]!.trim();
     const param = paramParts[1]!.trim();
 
-    if (operation !== 'solana.register_token') {
+    if (operation === 'solana.register_token') {
+      return this.handleTokenRegistration(input.txSignature, transaction, JSON.parse(param));
+    } else if (operation === 'solana.update_metadata') {
+      return this.handleTokenUpdate(input.txSignature, transaction, JSON.parse(param));
+    } else {
       const args = [param];
       logger.info(`Misc operation`, operation);
       return { status: "success", data: { operation, args } };
-    } else {
-      return this.handleTokenRegistration(input.txSignature, transaction, JSON.parse(param));
     }
   }
 
