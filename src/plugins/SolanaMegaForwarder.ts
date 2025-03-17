@@ -103,6 +103,9 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     const operationParts = operationLog.split('Operation name:');
     const paramParts = paramLog.split('Parameter:');
 
+    logger.info(`Operation: ${operationParts[1]?.trim()}`);
+    logger.info(`Param: ${paramParts[1]?.trim()}`);
+
     if (operationParts.length < 2 || paramParts.length < 2) {
       return { status: "failure" }
     }
