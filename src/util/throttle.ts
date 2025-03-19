@@ -22,7 +22,7 @@ export class Throttler {
    * @param maxCallsPerSecond Maximum number of calls allowed per second (default: 15)
    * @returns Throttler instance for the given identifier
    */
-  public static getInstance(identifier: string, maxCallsPerSecond: number = 1): Throttler {
+  public static getInstance(identifier: string, maxCallsPerSecond: number = 3): Throttler {
     if (!this.instances.has(identifier)) {
       this.instances.set(identifier, new Throttler(maxCallsPerSecond));
     }

@@ -16,6 +16,10 @@ export const requestPrepare = async <T, R>(peer: Peer,request: T): Promise<Proto
 
   const resBody = await response.json() as PrepareResponse;
 
+  if (resBody.status === "failure") {
+    throw new Error(`Failed to prepare task in peer ${peer.oracleId}`);
+  }
+
   return {
     status: resBody.status,  
     data: decode(Buffer.from(resBody.encodedData, 'hex')) as R,
