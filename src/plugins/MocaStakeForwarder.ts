@@ -191,7 +191,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     for (const event of selectedInput.data) {
       const eventId = `${event.transactionHash}-${event.logIndex}`;
       if (event.type === "staked" || event.type === "staked_behalf") {
-        tx = gtx.addTransactionToGtx('erc20.mint', [
+        tx = gtx.addTransactionToGtx('evm.erc20.mint', [
           event.chain,
           event.blockNumber,
           hexToBuffer(event.contractAddress),
@@ -203,7 +203,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
           "MOCASTAKE"
         ], tx);
       } else if (event.type === "unstaked") {
-        tx = gtx.addTransactionToGtx('erc20.destroy', [
+        tx = gtx.addTransactionToGtx('evm.erc20.destroy', [
           event.chain,
           event.blockNumber,
           hexToBuffer(event.contractAddress),

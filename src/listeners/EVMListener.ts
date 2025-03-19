@@ -137,6 +137,7 @@ export class EVMListener extends Listener {
         collection: this._contractInfo.collection!,
         event: event.event
       }
+      logger.info(`Handling ERC721 event: ${event.event}`);
       const task = new Task(ERC721Forwarder.pluginId, input);
       return task.start();
     } else if (this._contractInfo.type === "erc20") {
