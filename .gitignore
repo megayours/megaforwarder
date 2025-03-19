@@ -1,6 +1,6 @@
 # production config
-config/config.prod.yml
-docker-compose.prod.yml
+config/
+!config/oracle.example.yml
 
 # solana
 test-ledger

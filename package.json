@@ -21,6 +21,7 @@
     "@types/secp256k1": "^4.0.6",
     "bs58": "^6.0.0",
     "cache-manager": "^6.4.1",
+    "ethers": "^6.13.5",
     "postchain-client": "^1.21.0",
     "prom-client": "^15.1.3",
     "secp256k1": "^5.0.1",

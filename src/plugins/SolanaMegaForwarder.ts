@@ -35,10 +35,14 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
   constructor() {
     super({ id: SolanaMegaForwarder.pluginId });
 
-    this._connection = new Connection(this.config["solanaRpcUrl"] as string, "confirmed");
-    this._programId = this.config["solanaProgramId"] as string;
-    this._directoryNodeUrlPool = (this.config["directoryNodeUrlPool"] as string).split(',');
-    this._megaYoursBlockchainRid = Buffer.from((this.config["blockchainRid"] as string), "hex");
+    const solanaRpcUrl = config.rpc["solana_devnet"]?.[0];
+    if (!solanaRpcUrl) throw new Error("No Solana RPC URL found");
+
+    this._connection = new Connection(solanaRpcUrl, "confirmed");
+    this._programId = this.config.solanaProgramId as string;
+    if (!this._programId) throw new Error("No Solana Program ID found");
+    this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
+    this._megaYoursBlockchainRid = Buffer.from(config.abstractionChain.blockchainRid, "hex");
   }
 
   handleTokenRegistration(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): PrepareResult<Event> {
@@ -49,7 +53,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     return { 
       status: "success",
       data: {
-        operation: "solana.register_token", 
+        operation: "solana.megadata.register_token", 
         args: [
           transaction.slot,
           signature,
@@ -68,7 +72,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     return {
       status: "success",
       data: {
-        operation: "solana.update_metadata",
+        operation: "solana.megadata.update_metadata",
         args: [transaction.slot, signature, address, JSON.stringify(properties)]
       }
     }
@@ -113,9 +117,9 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     const operation = operationParts[1]!.trim();
     const param = paramParts[1]!.trim();
 
-    if (operation === 'solana.register_token') {
+    if (operation === 'solana.megadata.register_token') {
       return this.handleTokenRegistration(input.txSignature, transaction, JSON.parse(param));
-    } else if (operation === 'solana.update_metadata') {
+    } else if (operation === 'solana.megadata.update_metadata') {
       return this.handleTokenUpdate(input.txSignature, transaction, JSON.parse(param));
     } else {
       const args = [param];
@@ -156,9 +160,18 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
       blockchainRid: this._megaYoursBlockchainRid.toString('hex')
     })
 
-    await client.sendTransaction(gtx.serialize(_gtx));
-
-    logger.info(`Executed successfully`);
+    try {
+      await client.sendTransaction(gtx.serialize(_gtx));
+      logger.info(`Executed successfully`);
+    } catch (error: any) {
+      // Check if this is a 409 error (Transaction already in database)
+      if (error.status >= 400 && error.status < 500) {
+        logger.info(`Ignoring transaction, considering as success`);
+      } else {
+        logger.error(`Error executing transaction`, error);
+      }
+    }
+    
     return { status: "success" };
   }
 }

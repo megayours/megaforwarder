@@ -1,5 +1,8 @@
 import type { ListenerConfig } from '../core/types/config/Listener';
+import type { AbstractionChain } from '../core/types/config/AbstractionChain';
+import type { Rpc } from '../core/types/config/Rpc';
 import { type Peer } from '../core/types/config/Peer';
+import type { WebhookConfig } from '../core/types/config/Webhook';
 import yaml from 'yaml';
 
 /**
@@ -13,6 +16,9 @@ export type OracleConfigOptions = {
   host: string;
   apiPort: number;
   primary: boolean;
+  abstractionChain: AbstractionChain;
+  rpc: Rpc;
+  webhooks: WebhookConfig;
   listener: ListenerConfig;
   plugins: Record<string, Record<string, Record<string, unknown>>>;
   listeners: Record<string, Record<string, Record<string, unknown>>>;
@@ -33,6 +39,9 @@ export class OracleConfig {
   host: string;
   apiPort: number;
   primary: boolean;
+  abstractionChain: AbstractionChain;
+  rpc: Rpc;
+  webhooks: WebhookConfig;
   listener: ListenerConfig;
   plugins: Record<string, Record<string, Record<string, unknown>>>;
   listeners: Record<string, Record<string, Record<string, unknown>>>;
@@ -50,6 +59,9 @@ export class OracleConfig {
     this.host = options.host;
     this.apiPort = options.apiPort;
     this.primary = options.primary;
+    this.abstractionChain = options.abstractionChain;
+    this.rpc = options.rpc;
+    this.webhooks = options.webhooks;
     this.listener = options.listener;
     this.plugins = options.plugins;
     this.listeners = options.listeners;

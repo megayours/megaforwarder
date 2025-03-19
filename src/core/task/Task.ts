@@ -149,11 +149,17 @@ export class Task<T> {
     }
   }
 
-  async start(): Promise<void> {
+  async start(): Promise<boolean> {
     // Run each phase in sequence
-    const prepareResults = await this.runPreparePhase();
-    const processedData = await this.runProcessPhase(prepareResults);
-    const validatedData = await this.runValidatePhase(processedData, prepareResults);
-    await this.runExecutePhase(validatedData);
+    try {
+      const prepareResults = await this.runPreparePhase();
+      const processedData = await this.runProcessPhase(prepareResults);
+      const validatedData = await this.runValidatePhase(processedData, prepareResults);
+      await this.runExecutePhase(validatedData);
+      return true;
+    } catch (error) {
+      logger.error(`Error running task ${this.plugin.metadata.id}`, error);
+      return false;
+    }
   }
 }

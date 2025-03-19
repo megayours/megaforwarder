@@ -1,0 +1,90 @@
+services:
+  oracle1:
+    build: .
+    ports:
+      - "5300:5300"
+      - "5400:5400"
+    volumes:
+      - ./config/config1.prod.yml:/usr/src/app/config/config.yml
+    environment:
+      CONFIG_FILE: /usr/src/app/config/config.yml
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      # Public HTTPS Router (Port 5400)
+      - "traefik.http.routers.oracle1-public-secure.rule=Host(`oracle1.testnet.megayours.com`)"
+      - "traefik.http.routers.oracle1-public-secure.entrypoints=websecure"
+      - "traefik.http.routers.oracle1-public-secure.tls=true"
+      - "traefik.http.routers.oracle1-public-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.oracle1-public-secure.loadbalancer.server.port=5400"
+      # Internal HTTPS Router (Port 5300)
+      - "traefik.http.routers.oracle1-internal-secure.rule=Host(`oracle1.int.testnet.megayours.com`)"
+      - "traefik.http.routers.oracle1-internal-secure.entrypoints=websecure"
+      - "traefik.http.routers.oracle1-internal-secure.tls=true"
+      - "traefik.http.routers.oracle1-internal-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.oracle1-internal.loadbalancer.server.port=5300"
+    networks:
+      - backend
+      - traefik
+
+  oracle2:
+    build: .
+    ports:
+      - "5301:5301"
+      - "5401:5401"
+    volumes:
+      - ./config/config2.prod.yml:/usr/src/app/config/config.yml
+    environment:
+      CONFIG_FILE: /usr/src/app/config/config.yml
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      # Public HTTPS Router (Port 5400)
+      - "traefik.http.routers.oracle2-public-secure.rule=Host(`oracle2.testnet.megayours.com`)"
+      - "traefik.http.routers.oracle2-public-secure.entrypoints=websecure"
+      - "traefik.http.routers.oracle2-public-secure.tls=true"
+      - "traefik.http.routers.oracle2-public-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.oracle2-public-secure.loadbalancer.server.port=5401"
+      # Internal HTTPS Router (Port 5300)
+      - "traefik.http.routers.oracle2-internal-secure.rule=Host(`oracle2.int.testnet.megayours.com`)"
+      - "traefik.http.routers.oracle2-internal-secure.entrypoints=websecure"
+      - "traefik.http.routers.oracle2-internal-secure.tls=true"
+      - "traefik.http.routers.oracle2-internal-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.oracle2-internal.loadbalancer.server.port=5301"
+    networks:
+      - backend
+      - traefik
+
+  oracle3:
+    build: .
+    ports:
+      - "5302:5302"
+      - "5402:5402"
+    volumes:
+      - ./config/config3.prod.yml:/usr/src/app/config/config.yml
+    environment:
+      CONFIG_FILE: /usr/src/app/config/config.yml
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      # Public HTTPS Router (Port 5400)
+      - "traefik.http.routers.oracle3-public-secure.rule=Host(`oracle3.testnet.megayours.com`)"
+      - "traefik.http.routers.oracle3-public-secure.entrypoints=websecure"
+      - "traefik.http.routers.oracle3-public-secure.tls=true"
+      - "traefik.http.routers.oracle3-public-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.oracle3-public-secure.loadbalancer.server.port=5402"
+      # Internal HTTPS Router (Port 5300)
+      - "traefik.http.routers.oracle3-internal-secure.rule=Host(`oracle3.int.testnet.megayours.com`)"
+      - "traefik.http.routers.oracle3-internal-secure.entrypoints=websecure"
+      - "traefik.http.routers.oracle3-internal-secure.tls=true"
+      - "traefik.http.routers.oracle3-internal-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.oracle3-internal.loadbalancer.server.port=5302"
+    networks:
+      - backend
+      - traefik
+
+networks:
+  backend:
+    name: backend
+  traefik:
+    external: true

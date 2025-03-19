@@ -6,6 +6,8 @@ import { Listener } from "../core/listener/Listener";
 import { SolanaMegaForwarder } from "../plugins/SolanaMegaForwarder";
 import { logger } from "../util/monitoring";
 import { createClient } from "postchain-client";
+import config from "../config";
+import { Throttler } from "../util/throttle";
 
 const BLOCK_HEIGHT_INCREMENT = 100;
 
@@ -17,15 +19,20 @@ export class SolanaListener extends Listener implements IListener {
   private readonly _directoryNodeUrlPool: string[];
   private _currentBlockHeight: number = -1;
   private _programPubkey: PublicKey | null = null;
+  private _throttler = Throttler.getInstance("solana", 1);
 
   constructor() {
     super("solana-listener");
 
     this._cache = createCache({ ttl: this.config["cacheTtlMs"] as number });
     this._programId = this.config["programId"] as string;
-    this._rpcUrl = this.config["rpcUrl"] as string;
-    this._directoryNodeUrlPool = (this.config["directoryNodeUrlPool"] as string)?.split(',') ?? [];
-    this._blockchainRid = this.config["blockchainRid"] as string;
+
+    const solanaRpcUrl = config.rpc["solana_devnet"]?.[0];
+    if (!solanaRpcUrl) throw new Error("No Solana RPC URL found");
+
+    this._rpcUrl = solanaRpcUrl;
+    this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
+    this._blockchainRid = config.abstractionChain.blockchainRid;
   }
 
   private async getSlot(): Promise<number> {
@@ -34,7 +41,7 @@ export class SolanaListener extends Listener implements IListener {
       blockchainRid: this._blockchainRid
     });
 
-    const slot = await client.query<number | null>('solana.get_slot');
+    const slot = await client.query<number | null>('solana.megadata.get_slot');
     logger.info(`Starting from indexed slot ${slot}`);
     return slot ?? 0;
   }
@@ -72,17 +79,17 @@ export class SolanaListener extends Listener implements IListener {
         throw new Error('Program public key not initialized');
       }
 
-      const currentSlot = await connection.getSlot();
+      const currentSlot = await this._throttler.execute(() => connection.getSlot());
 
       // Get all signatures for the program
-      let signatures = await connection.getSignaturesForAddress(
-        this._programPubkey,
+      let signatures = await this._throttler.execute(() => connection.getSignaturesForAddress(
+        this._programPubkey!,
         {
           minContextSlot: this._currentBlockHeight,
           limit: BLOCK_HEIGHT_INCREMENT,
         },
         'confirmed'
-      );
+      ));
 
       // Filter out cached signatures properly
       const uncachedSignatures = [];
@@ -111,14 +118,18 @@ export class SolanaListener extends Listener implements IListener {
         logger.debug(`Cached ${sig.signature}`);
 
         // Get the full transaction details
-        const tx = await connection.getTransaction(sig.signature, {
+        const tx = await this._throttler.execute(() => connection.getTransaction(sig.signature, {
           maxSupportedTransactionVersion: 0
-        });
+        }));
         await this._cache.set(sig.signature, tx);
         if (tx) {
           if (tx.meta?.logMessages?.some(log => log.includes('Operation name:'))) {
             const task = new Task(SolanaMegaForwarder.pluginId, { txSignature: sig.signature });
-            await task.start();
+            const success = await task.start();
+            if (!success) {
+              logger.error(`Failed to handle transaction: ${sig.signature}`);
+              return;
+            }
           }
         }
       }

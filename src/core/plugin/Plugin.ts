@@ -10,10 +10,10 @@ export abstract class Plugin<TPluginInput, TPrepareOutput, TValidateData, TPlugi
     this._metadata = metadata;
 
     if (!config?.plugins?.[metadata.id]) {
-      throw new Error(`Plugin configuration for ${metadata.id} not found in config`);
+      this._config = {};
+    } else {
+      this._config = config.plugins[metadata.id] as Record<string, unknown>;
     }
-
-    this._config = config.plugins[metadata.id] as Record<string, unknown>;
   }
 
   get metadata(): PluginMetadata {

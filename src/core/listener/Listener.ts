@@ -1,11 +1,11 @@
 import config from "../../config";
 
 export abstract class Listener {
-  protected readonly listenerId: string;
+  public readonly id: string;
   private _config: Record<string, unknown>;
 
   constructor(listenerId: string) {
-    this.listenerId = listenerId;
+    this.id = listenerId;
 
     if (!config?.listeners?.[listenerId]) {
       throw new Error(`Listener configuration for ${listenerId} not found in config`);

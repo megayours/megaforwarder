@@ -1,5 +1,8 @@
 import type { IListener } from "../interfaces/IListener";
 import config from "../../config";
+import { logger } from "../../util/monitoring";
+import { sleep } from "../../util/throttle";
+
 export class ListenerRegistry {
   private static instance: ListenerRegistry;
   private listeners: IListener[] = [];
@@ -11,21 +14,30 @@ export class ListenerRegistry {
   public static getInstance(): ListenerRegistry {
     if (!ListenerRegistry.instance) {
       ListenerRegistry.instance = new ListenerRegistry();
-      ListenerRegistry.instance.start();
+      setTimeout(() => ListenerRegistry.instance.start(), 0);
     }
-    return ListenerRegistry.instance; 
+    return ListenerRegistry.instance;
   }
 
   public register(listener: IListener) {
+    console.log(listener);
+    logger.info(`Registering listener ${listener.id}`);
     this.listeners.push(listener);
   }
 
   public async start() {
     while (true) {
-      for (const listener of this.listeners) {
-        await listener.run();
+      try {
+        for (const listener of this.listeners) {
+          logger.info(`Running listener ${listener.id}`);
+          await listener.run();
+          await sleep(config.listener.intervalMs);
+        }
+      } catch (error) {
+        logger.error("Critical error in listener registry loop", error);
       }
-      await new Promise(resolve => setTimeout(resolve, config.listener.intervalMs));
+
+      await sleep(config.listener.intervalMs);
     }
   }
 }
