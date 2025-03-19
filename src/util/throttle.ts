@@ -13,7 +13,7 @@ export class Throttler {
   private callCount: number = 0;
   private lastWindowStart: number = Date.now();
   private consecutiveErrors: number = 0;
-  private backoffMs: number = 100;
+  private backoffMs: number = 500;
   private readonly maxBackoffMs: number = 15000; // 15 seconds max backoff
 
   /**
@@ -22,7 +22,7 @@ export class Throttler {
    * @param maxCallsPerSecond Maximum number of calls allowed per second (default: 15)
    * @returns Throttler instance for the given identifier
    */
-  public static getInstance(identifier: string, maxCallsPerSecond: number = 3): Throttler {
+  public static getInstance(identifier: string, maxCallsPerSecond: number = 1): Throttler {
     if (!this.instances.has(identifier)) {
       this.instances.set(identifier, new Throttler(maxCallsPerSecond));
     }
