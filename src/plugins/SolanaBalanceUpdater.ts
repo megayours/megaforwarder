@@ -54,6 +54,8 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     const mintPubkey = new PublicKey(input.tokenMint);
     const userPubkey = new PublicKey(input.userAccount);
 
+    logger.info(`Looking up token account for mint ${mintPubkey.toString()} and user ${userPubkey.toString()}`);
+
     // Get the associated token address for this user and token mint
     const tokenAddress = await this._throttler.execute(() =>
       ResultAsync.fromPromise(
@@ -62,35 +64,73 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
           userPubkey,
           true // Allow owner off curve
         ),
-        (error): PluginError => ({ type: "prepare_error", context: `Error getting associated token address: ${error}` })
+        (error): PluginError => ({ type: "permanent_error", context: `Error getting associated token address: ${error}` })
       )
     );
 
     if (tokenAddress.isErr()) {
-      return err({ type: "prepare_error", context: `Error getting associated token address: ${tokenAddress.error}` });
+      return err({ type: "permanent_error", context: `Error getting associated token address: ${tokenAddress.error}` });
     }
 
-    logger.info(`Looking up token balance for address ${tokenAddress.toString()}`);
+    logger.info(`Looking up token balance for address ${tokenAddress.value.toString()}`);
 
     // Get the token account info to fetch balance
     let balance = "0";
 
-    // Use throttler to avoid rate limiting
-    const tokenAccount = await this._throttler.execute(() =>
-      ResultAsync.fromPromise(
-        getAccount(this._connection, tokenAddress.value),
-        (error): PluginError => ({ type: "prepare_error", context: `Error getting token account: ${error}` })
-      )
-    );
+    // First, try to find all token accounts using getParsedTokenAccountsByOwner
+    // This is more reliable but potentially more expensive
+    try {
+      const tokenAccounts = await this._throttler.execute(() => 
+        ResultAsync.fromPromise(
+          this._connection.getParsedTokenAccountsByOwner(
+            userPubkey,
+            { mint: mintPubkey }
+          ),
+          (error: any): PluginError => ({ type: "prepare_error", context: `Error getting parsed token accounts: ${JSON.stringify(error)}` })
+        )
+      );
+      
+      if (tokenAccounts.isOk() && tokenAccounts.value.value.length > 0) {
+        const accountInfo = tokenAccounts.value.value[0];
+        if (accountInfo && accountInfo.account.data.parsed.info) {
+          const parsedInfo = accountInfo.account.data.parsed.info;
+          balance = parsedInfo.tokenAmount.amount;
+          logger.info(`Retrieved token balance from parsed account: ${balance} at address ${accountInfo.pubkey.toString()}`);
+        } else {
+          logger.info(`Retrieved account info structure is invalid`);
+        }
+      } else if (tokenAccounts.isErr()) {
+        logger.warn(`Error getting parsed token accounts, falling back to ATA: ${JSON.stringify(tokenAccounts.error)}`);
+        
+        // Fallback to the ATA method
+        const tokenAccountResult = await this._throttler.execute(() =>
+          ResultAsync.fromPromise(
+            getAccount(this._connection, tokenAddress.value),
+            (error: any): PluginError => {
+              // If token account doesn't exist, this is not an error - the balance is just 0
+              if (error.name === "TokenAccountNotFoundError") {
+                logger.info(`Token account not found for ${tokenAddress.value.toString()}, using 0 balance`);
+                return { type: "non_error", context: "Token account not found" };
+              }
+              return { type: "prepare_error", context: `Error getting token account: ${JSON.stringify(error)}` };
+            }
+          )
+        );
 
-    if (tokenAccount.isErr()) {
-      return err({ type: "prepare_error", context: `Error getting token account: ${tokenAccount.error}` });
+        if (tokenAccountResult.isOk()) {
+          balance = tokenAccountResult.value.amount.toString();
+          logger.info(`Retrieved token balance from getAccount: ${balance}`);
+        } else if (tokenAccountResult.error.type !== "non_error") {
+          logger.warn(`Failed to get token balance via both methods: ${JSON.stringify(tokenAccountResult.error)}`);
+        }
+      } else {
+        logger.info(`No token accounts found for mint ${mintPubkey.toString()}`);
+      }
+    } catch (error: any) {
+      logger.error(`Error in token account lookup: ${JSON.stringify(error)}`);
     }
 
-    // Extract balance from token account
-    balance = tokenAccount.value.amount.toString();
-
-    logger.info(`Retrieved token balance: ${balance}`);
+    logger.info(`Final retrieved token balance: ${balance}`);
 
     // For a balance update, pass the token mint, user account, and current balance to the Chromia blockchain
     return ok({

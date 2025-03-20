@@ -25,6 +25,9 @@ export class Task<T> {
   private async runPreparePhase(): Promise<Result<{ publicKey: string; result: ProtocolPrepareResult<unknown> }[], TaskError>> {
     const result = await this.plugin.prepare(this.input);
     if (result.isErr()) {
+      if (result.error.type === "permanent_error") {
+        return err({ type: "permanent_error", context: result.error.context });
+      }
       return err({ type: "plugin_error", context: result.error.context });
     }
 
@@ -152,6 +155,9 @@ export class Task<T> {
     const prepareResultsRes = await this.runPreparePhase();
 
     if (prepareResultsRes.isErr()) {
+      if (prepareResultsRes.error.type === "permanent_error") {
+        return ok(true);
+      }
       logger.error(`Error during prepare phase: ${prepareResultsRes.error.type} > ${prepareResultsRes.error.context}`);
       return err({ type: "plugin_error", context: prepareResultsRes.error.context });
     }
