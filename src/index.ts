@@ -26,7 +26,7 @@ pluginRegistry.register(new MocaStakeForwarder());
 pluginRegistry.register(new SolanaBalanceUpdater());
 
 if (config.primary) {
-  // const listenerHandler = ListenerRegistry.getInstance();
+  const listenerHandler = ListenerRegistry.getInstance();
   // listenerHandler.register(new SolanaListener());
   // listenerHandler.register(new EVMListener({
   //   chain: "ethereum",
