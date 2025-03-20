@@ -1,7 +1,7 @@
 import type { Log } from "ethers";
 import { Plugin } from "../core/plugin/Plugin";
 import type { EventLog } from "ethers";
-import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
+import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import type { ProcessInput } from "../core/types/Protocol";
 import { logger } from "../util/monitoring";
 import { JsonRpcProvider } from "ethers/providers";
@@ -130,7 +130,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     const users = decodedInput.args[0] || [];
     const amounts = decodedInput.args[1] || [];
 
-    console.log(`Decoded ${users.length} users and ${amounts.length} amounts from transaction input`);
+    logger.info(`Decoded ${users.length} users and ${amounts.length} amounts from transaction input`);
 
     const events: StakingEvent[] = [];
     // Process each user with their corresponding amount
@@ -233,7 +233,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     })
 
     try {
-      await client.sendTransaction(gtx.serialize(_gtx));
+      await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.Dapp);
       logger.info(`Executed successfully`);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
