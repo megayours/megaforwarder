@@ -151,7 +151,8 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     const { operation, args }: BalanceUpdateEvent = selectedData.data;
 
     const emptyGtx = gtx.emptyGtx(this._megaYoursBlockchainRid);
-    const tx = gtx.addTransactionToGtx(operation, args, emptyGtx);
+    let tx = gtx.addTransactionToGtx(operation, args, emptyGtx);
+    tx = gtx.addTransactionToGtx('nop', [Math.floor(Math.random() * 1000000)], tx);
     tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
     return ok(tx);
   }
