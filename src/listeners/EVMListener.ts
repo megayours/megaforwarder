@@ -144,7 +144,7 @@ export class EVMListener extends Listener {
       const task = new Task(ERC721Forwarder.pluginId, input);
       const result = await task.start();
       if (result.isErr()) {
-        return err({ type: "task_error", context: result.error.type });
+        return err({ type: "task_error", context: result.error.context });
       }
       return ok(result.value);
     } 
@@ -157,7 +157,7 @@ export class EVMListener extends Listener {
       const task = new Task(ERC20Forwarder.pluginId, input);
       const result = await task.start();
       if (result.isErr()) {
-        return err({ type: "task_error", context: result.error.type });
+        return err({ type: "task_error", context: result.error.context });
       }
       return ok(result.value);
     } 
@@ -171,14 +171,17 @@ export class EVMListener extends Listener {
       const task = new Task(MocaStakeForwarder.pluginId, input);
       const result = await task.start();
       if (result.isErr()) {
-        return err({ type: "task_error", context: result.error.type });
+        return err({ type: "task_error", context: result.error.context });
       }
       return ok(result.value);
     } 
     
     else {
       logger.error(`Unsupported contract type: ${this._contractInfo.type}`);
-      return err({ type: "unsupported_contract_type" });
+      return err({ 
+        type: "unsupported_contract_type",
+        context: `Unsupported contract type: ${this._contractInfo.type}` 
+      });
     }
   }
 }

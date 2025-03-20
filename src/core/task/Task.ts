@@ -25,7 +25,7 @@ export class Task<T> {
   private async runPreparePhase(): Promise<Result<{ publicKey: string; result: ProtocolPrepareResult<unknown> }[], TaskError>> {
     const result = await this.plugin.prepare(this.input);
     if (result.isErr()) {
-      return err({ type: "plugin_error", context: result.error.type });
+      return err({ type: "plugin_error", context: result.error.context });
     }
 
     const peers = config.peers;
@@ -49,7 +49,7 @@ export class Task<T> {
       });
 
       if (result.isErr()) {
-        return err({ type: "plugin_error", context: result.error.type });
+        return err({ type: "plugin_error", context: result.error.context });
       }
 
       prepareResults.push({ publicKey: peer.publicKey, result: result.value });
@@ -61,11 +61,11 @@ export class Task<T> {
 
     const prepareResult = await tryCatch(Promise.race([Promise.all(preparePromises), prepareTimeoutPromise]));
     if (prepareResult.error) {
-      return err({ type: "timeout" });
+      return err({ type: "timeout", context: prepareResult.error.message });
     }
 
     if (prepareResults.length < config.minSignaturesRequired) {
-      return err({ type: "insufficient_peers" });
+      return err({ type: "insufficient_peers", context: `Only ${prepareResults.length} peers available` });
     }
 
     return ok(prepareResults);
@@ -81,7 +81,7 @@ export class Task<T> {
 
     const processResult = await this.plugin.process(processInput);
     if (processResult.isErr()) {
-      return err({ type: "plugin_error", context: processResult.error.type });
+      return err({ type: "plugin_error", context: processResult.error.context });
     }
 
     return ok(processResult.value);
@@ -99,14 +99,14 @@ export class Task<T> {
 
     const firstPrepareResult = prepareResults[0]?.result.data;
     if (!firstPrepareResult) {
-      return err({ type: "plugin_error" });
+      return err({ type: "plugin_error", context: "No prepare result from primary peer" });
     }
 
     const primaryValidateResult = await this.plugin.validate(processedData, firstPrepareResult);
     if (primaryValidateResult.isErr()) {
-      return err({ type: "plugin_error", context: primaryValidateResult.error.type });
+      return err({ type: "plugin_error", context: primaryValidateResult.error.context });
     } else if (!primaryValidateResult.value) {
-      return err({ type: "plugin_error" });
+      return err({ type: "plugin_error", context: "Primary peer validation failed" });
     }
 
     // Peers from config that have been selected for validation, excluding ourselves
@@ -129,7 +129,7 @@ export class Task<T> {
         signature,
       });
       if (validationResult.isErr()) {
-        return err({ type: "plugin_error", context: validationResult.error.type });
+        return err({ type: "plugin_error", context: validationResult.error.context });
       }
 
       data = validationResult.value;
@@ -141,7 +141,7 @@ export class Task<T> {
   private async runExecutePhase(validatedData: unknown): Promise<Result<unknown, TaskError>> {
     const executeResult = await this.plugin.execute(validatedData);
     if (executeResult.isErr()) {
-      return err({ type: "plugin_error", context: executeResult.error.type });
+      return err({ type: "plugin_error", context: executeResult.error.context });
     }
 
     return ok(executeResult.value);
@@ -153,26 +153,26 @@ export class Task<T> {
 
     if (prepareResultsRes.isErr()) {
       logger.error(`Error during prepare phase: ${prepareResultsRes.error.type} > ${prepareResultsRes.error.context}`);
-      return err({ type: "plugin_error" });
+      return err({ type: "plugin_error", context: prepareResultsRes.error.context });
     }
 
     const prepareResults = prepareResultsRes.value;
     const processedData = await this.runProcessPhase(prepareResults);
     if (processedData.isErr()) {
       logger.error(`Error during process phase: ${processedData.error.type} > ${processedData.error.context}`);
-      return err({ type: "plugin_error" });
+      return err({ type: "plugin_error", context: processedData.error.context });
     }
 
     const validatedData = await this.runValidatePhase(processedData.value, prepareResults);
     if (validatedData.isErr()) {
       logger.error(`Error during validate phase: ${validatedData.error.type} > ${validatedData.error.context}`);
-      return err({ type: "plugin_error" });
+      return err({ type: "plugin_error", context: validatedData.error.context });
     }
 
     const executeResult = await this.runExecutePhase(validatedData.value);
     if (executeResult.isErr()) {
       logger.error(`Error during execute phase: ${executeResult.error.type} > ${executeResult.error.context}`);
-      return err({ type: "plugin_error" });
+      return err({ type: "plugin_error", context: executeResult.error.context });
     }
     return ok(true);
   }
