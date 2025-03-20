@@ -152,26 +152,26 @@ export class Task<T> {
     const prepareResultsRes = await this.runPreparePhase();
 
     if (prepareResultsRes.isErr()) {
-      logger.error(`Error during prepare phase: ${prepareResultsRes.error.type}`);
+      logger.error(`Error during prepare phase: ${prepareResultsRes.error.type} > ${prepareResultsRes.error.context}`);
       return err({ type: "plugin_error" });
     }
 
     const prepareResults = prepareResultsRes.value;
     const processedData = await this.runProcessPhase(prepareResults);
     if (processedData.isErr()) {
-      logger.error(`Error during process phase: ${processedData.error.type}`);
+      logger.error(`Error during process phase: ${processedData.error.type} > ${processedData.error.context}`);
       return err({ type: "plugin_error" });
     }
 
     const validatedData = await this.runValidatePhase(processedData.value, prepareResults);
     if (validatedData.isErr()) {
-      logger.error(`Error during validate phase: ${validatedData.error.type}`);
+      logger.error(`Error during validate phase: ${validatedData.error.type} > ${validatedData.error.context}`);
       return err({ type: "plugin_error" });
     }
 
     const executeResult = await this.runExecutePhase(validatedData.value);
     if (executeResult.isErr()) {
-      logger.error(`Error during execute phase: ${executeResult.error.type}`);
+      logger.error(`Error during execute phase: ${executeResult.error.type} > ${executeResult.error.context}`);
       return err({ type: "plugin_error" });
     }
     return ok(true);
