@@ -172,7 +172,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
   }
 
   async execute(_gtx: GTX): Promise<Result<SolanaBalanceUpdaterOutput, PluginError>> {
-    logger.info(`Executing GTX for balance update`);
+    logger.debug(`Executing GTX for balance update`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._megaYoursBlockchainRid.toString('hex')

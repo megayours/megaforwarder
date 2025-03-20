@@ -147,7 +147,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
   }
 
   async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
-    logger.info(`Executing GTX`);
+    logger.debug(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._megaYoursBlockchainRid.toString('hex')

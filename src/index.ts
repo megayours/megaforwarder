@@ -26,35 +26,35 @@ pluginRegistry.register(new MocaStakeForwarder());
 pluginRegistry.register(new SolanaBalanceUpdater());
 
 if (config.primary) {
-  const listenerHandler = ListenerRegistry.getInstance();
-  listenerHandler.register(new SolanaListener());
-  listenerHandler.register(new EVMListener({
-    chain: "ethereum",
-    contract: "0xBd3531dA5CF5857e7CfAA92426877b022e612cf8",
-    collection: "Pudgy Penguins",
-    startBlock: 12876277,
-    abi: erc721Abi,
-    type: "erc721",
-    filters: [
-      {
-        name: "Transfer",
-        filter: (contract: Contract) => contract.filters.Transfer as ContractEventName
-      }
-    ]
-  }));
-  listenerHandler.register(new EVMListener({
-    chain: "ethereum",
-    contract: "0xf944e35f95e819e752f3ccb5faf40957d311e8c5",
-    startBlock: 19729886,
-    abi: erc20Abi,
-    type: "erc20",
-    filters: [
-      {
-        name: "Transfer",
-        filter: (contract: Contract) => contract.filters.Transfer as ContractEventName
-      }
-    ]
-  }));
+  // const listenerHandler = ListenerRegistry.getInstance();
+  // listenerHandler.register(new SolanaListener());
+  // listenerHandler.register(new EVMListener({
+  //   chain: "ethereum",
+  //   contract: "0xBd3531dA5CF5857e7CfAA92426877b022e612cf8",
+  //   collection: "Pudgy Penguins",
+  //   startBlock: 12876277,
+  //   abi: erc721Abi,
+  //   type: "erc721",
+  //   filters: [
+  //     {
+  //       name: "Transfer",
+  //       filter: (contract: Contract) => contract.filters.Transfer as ContractEventName
+  //     }
+  //   ]
+  // }));
+  // listenerHandler.register(new EVMListener({
+  //   chain: "ethereum",
+  //   contract: "0xf944e35f95e819e752f3ccb5faf40957d311e8c5",
+  //   startBlock: 19729886,
+  //   abi: erc20Abi,
+  //   type: "erc20",
+  //   filters: [
+  //     {
+  //       name: "Transfer",
+  //       filter: (contract: Contract) => contract.filters.Transfer as ContractEventName
+  //     }
+  //   ]
+  // }));
   listenerHandler.register(new EVMListener({
     chain: "ethereum",
     contract: "0x9a98E6B60784634AE273F2FB84519C7F1885AeD2",

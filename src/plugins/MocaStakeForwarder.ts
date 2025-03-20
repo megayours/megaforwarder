@@ -226,7 +226,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
   }
 
   async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
-    logger.info(`Executing GTX`);
+    logger.debug(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._blockchainRid.toString('hex')
@@ -255,7 +255,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     const rpcUrl = rpcs?.[Math.floor(Math.random() * rpcs.length)];
     if (!rpcUrl) throw new Error(`No RPC URL found for chain ${chain}`);
 
-    logger.info(`Selected RPC URL: ${rpcUrl}`);
+    logger.debug(`Selected RPC URL: ${rpcUrl}`);
     return rpcUrl;
   }
 

@@ -188,7 +188,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
   }
 
   async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
-    logger.info(`Executing GTX`);
+    logger.debug(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._blockchainRid.toString('hex')
@@ -217,7 +217,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     const rpcUrl = rpcs?.[Math.floor(Math.random() * rpcs.length)];
     if (!rpcUrl) throw new Error(`No RPC URL found for chain ${chain}`);
 
-    logger.info(`Selected RPC URL: ${rpcUrl}`);
+    logger.debug(`Selected RPC URL: ${rpcUrl}`);
     return rpcUrl;
   }
 

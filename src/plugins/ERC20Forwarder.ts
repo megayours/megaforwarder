@@ -192,7 +192,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
   }
 
   async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
-    logger.info(`Executing GTX`);
+    logger.debug(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._blockchainRid.toString('hex')
