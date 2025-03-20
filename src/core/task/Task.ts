@@ -5,6 +5,9 @@ import { requestPrepare, requestValidate } from "./client";
 import { PluginNotFound } from "../errors/PluginNotFound";
 import type { ProcessInput, ProtocolPrepareResult } from "../types/Protocol";
 import { logger } from "../../util/monitoring";
+import { tryCatch } from "../../util/try-catch";
+import { err, ok, Result } from "neverthrow";
+import type { TaskError } from "../../util/errors";
 
 export class Task<T> {
   private plugin: IPlugin<unknown, unknown, unknown, T>;
@@ -19,10 +22,10 @@ export class Task<T> {
     this.input = input;
   }
 
-  private async runPreparePhase(): Promise<{ publicKey: string; result: ProtocolPrepareResult<unknown> }[]> {
+  private async runPreparePhase(): Promise<Result<{ publicKey: string; result: ProtocolPrepareResult<unknown> }[], TaskError>> {
     const result = await this.plugin.prepare(this.input);
-    if (result.status !== "success") {
-      throw new Error(`Plugin ${this.plugin.metadata.id} returned invalid result: ${result.status}`);
+    if (result.isErr()) {
+      return err({ type: "plugin_error", context: result.error.type });
     }
 
     const peers = config.peers;
@@ -32,8 +35,7 @@ export class Task<T> {
     prepareResults.push({
       publicKey: config.publicKey,
       result: {
-        status: "success",
-        data: result.data,
+        data: result.value,
         signatureData: null,
         encodedData: "<PRIMARY>"
       }
@@ -45,72 +47,66 @@ export class Task<T> {
         pluginId: this.plugin.metadata.id,
         input: this.input,
       });
-      prepareResults.push({ publicKey: peer.publicKey, result });
+
+      if (result.isErr()) {
+        return err({ type: "plugin_error", context: result.error.type });
+      }
+
+      prepareResults.push({ publicKey: peer.publicKey, result: result.value });
     });
 
     const prepareTimeoutPromise = new Promise<void>((resolve, reject) => {
       setTimeout(() => reject(new Error("Prepare phase timed out")), peerTimeoutMs);
     });
 
-    try {
-      await Promise.race([Promise.all(preparePromises), prepareTimeoutPromise]);
-    } catch (error: unknown) {
-      if (error instanceof Error && error.message === "Prepare phase timed out") {
-        logger.warn("Prepare phase timed out, proceeding with collected results");
-      } else {
-        throw error;
-      }
+    const prepareResult = await tryCatch(Promise.race([Promise.all(preparePromises), prepareTimeoutPromise]));
+    if (prepareResult.error) {
+      return err({ type: "timeout" });
     }
 
     if (prepareResults.length < config.minSignaturesRequired) {
-      throw new Error(
-        `Not enough peer prepares received. Got ${prepareResults.length}, required ${config.minSignaturesRequired}`
-      );
+      return err({ type: "insufficient_peers" });
     }
 
-    return prepareResults;
+    return ok(prepareResults);
   }
 
   private async runProcessPhase(
     prepareResults: { publicKey: string; result: ProtocolPrepareResult<unknown> }[]
-  ): Promise<unknown> {
+  ): Promise<Result<unknown, TaskError>> {
     const processInput: ProcessInput<unknown>[] = prepareResults.map((result) => ({
       pubkey: result.publicKey,
       data: result.result.data!,
     }));
 
     const processResult = await this.plugin.process(processInput);
-    if (processResult.status !== "success") {
-      throw new Error(`Plugin ${this.plugin.metadata.id} returned invalid result: ${processResult.status}`);
+    if (processResult.isErr()) {
+      return err({ type: "plugin_error", context: processResult.error.type });
     }
 
-    if (!processResult.data) {
-      throw new Error("No data to validate");
-    }
-
-    return processResult.data;
+    return ok(processResult.value);
   }
 
   private async runValidatePhase(
     processedData: unknown,
     prepareResults: { publicKey: string; result: ProtocolPrepareResult<unknown> }[]
-  ): Promise<unknown> {
+  ): Promise<Result<unknown, TaskError>> {
     const selectedPeers = prepareResults.map((result) => result.publicKey);
 
     if (prepareResults.length === 0) {
-      throw new Error("No prepare results available for validation");
+      return err({ type: "insufficient_peers" });
     }
 
     const firstPrepareResult = prepareResults[0]?.result.data;
     if (!firstPrepareResult) {
-      throw new Error("First prepare result data is undefined");
+      return err({ type: "plugin_error" });
     }
 
     const primaryValidateResult = await this.plugin.validate(processedData, firstPrepareResult);
-    if (primaryValidateResult.status !== "success") {
-      throw new Error(`Plugin ${this.plugin.metadata.id} returned invalid result: ${primaryValidateResult.status}`);
-    } else if (!primaryValidateResult.data) {
-      throw new Error("No data to validate");
+    if (primaryValidateResult.isErr()) {
+      return err({ type: "plugin_error", context: primaryValidateResult.error.type });
+    } else if (!primaryValidateResult.value) {
+      return err({ type: "plugin_error" });
     }
 
     // Peers from config that have been selected for validation, excluding ourselves
@@ -118,48 +114,66 @@ export class Task<T> {
       .map((peer) => config.peers.find((p) => p.publicKey === peer))
       .filter((peer) => peer !== undefined);
 
-    let data = primaryValidateResult.data;
+    let data = primaryValidateResult.value;
     for (const peer of validationPeers) {
       const preparedData = prepareResults.find((result) => result.publicKey === peer.publicKey)?.result.data;
-      if (!preparedData) throw new Error("No prepared data received from peer");
+      if (!preparedData) return err({ type: "plugin_error", context: "No prepared data received from peer" });
       const signature = prepareResults.find((result) => result.publicKey === peer.publicKey)?.result.signatureData?.signature;
-      if (!signature) throw new Error("No signature received from peer");
+      if (!signature) return err({ type: "plugin_error", context: "No signature received from peer" });
 
+      logger.info(`Validating data from peer ${peer.publicKey}`, data);
       const validationResult = await requestValidate<unknown, T>(peer, {
         pluginId: this.plugin.metadata.id,
         input: data,
         preparedData,
         signature,
       });
-      if (validationResult.status !== "success") {
-        throw new Error(`Plugin ${this.plugin.metadata.id} returned invalid result: ${validationResult.status}`);
+      if (validationResult.isErr()) {
+        return err({ type: "plugin_error", context: validationResult.error.type });
       }
 
-      if (!validationResult.data) throw new Error("No data received from peer");
-      data = validationResult.data;
+      data = validationResult.value;
     }
 
-    return data;
+    return ok(data);
   }
 
-  private async runExecutePhase(validatedData: unknown): Promise<void> {
+  private async runExecutePhase(validatedData: unknown): Promise<Result<unknown, TaskError>> {
     const executeResult = await this.plugin.execute(validatedData);
-    if (executeResult.status !== "success") {
-      throw new Error(`Plugin ${this.plugin.metadata.id} returned invalid result: ${executeResult.status}`);
+    if (executeResult.isErr()) {
+      return err({ type: "plugin_error", context: executeResult.error.type });
     }
+
+    return ok(executeResult.value);
   }
 
-  async start(): Promise<boolean> {
+  async start(): Promise<Result<boolean, TaskError>> {
     // Run each phase in sequence
-    try {
-      const prepareResults = await this.runPreparePhase();
-      const processedData = await this.runProcessPhase(prepareResults);
-      const validatedData = await this.runValidatePhase(processedData, prepareResults);
-      await this.runExecutePhase(validatedData);
-      return true;
-    } catch (error) {
-      logger.error(`Error running task ${this.plugin.metadata.id}`, error);
-      return false;
+    const prepareResultsRes = await this.runPreparePhase();
+
+    if (prepareResultsRes.isErr()) {
+      logger.error(`Error during prepare phase: ${prepareResultsRes.error.type}`);
+      return err({ type: "plugin_error" });
     }
+
+    const prepareResults = prepareResultsRes.value;
+    const processedData = await this.runProcessPhase(prepareResults);
+    if (processedData.isErr()) {
+      logger.error(`Error during process phase: ${processedData.error.type}`);
+      return err({ type: "plugin_error" });
+    }
+
+    const validatedData = await this.runValidatePhase(processedData.value, prepareResults);
+    if (validatedData.isErr()) {
+      logger.error(`Error during validate phase: ${validatedData.error.type}`);
+      return err({ type: "plugin_error" });
+    }
+
+    const executeResult = await this.runExecutePhase(validatedData.value);
+    if (executeResult.isErr()) {
+      logger.error(`Error during execute phase: ${executeResult.error.type}`);
+      return err({ type: "plugin_error" });
+    }
+    return ok(true);
   }
 }

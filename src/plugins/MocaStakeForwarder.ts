@@ -2,7 +2,7 @@ import type { Log } from "ethers";
 import { Plugin } from "../core/plugin/Plugin";
 import type { EventLog } from "ethers";
 import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
-import type { ExecuteResult, PrepareResult, ProcessInput, ProcessResult, ValidateResult } from "../core/types/Protocol";
+import type { ProcessInput } from "../core/types/Protocol";
 import { logger } from "../util/monitoring";
 import { JsonRpcProvider } from "ethers/providers";
 import { dataSlice, ethers } from "ethers";
@@ -13,6 +13,8 @@ import { hexToBuffer } from "../util/hex";
 import { Interface } from "ethers";
 import type { TransactionResponse } from "ethers";
 import { Throttler } from "../util/throttle";
+import { err, ok, Result } from "neverthrow";
+import type { PluginError } from "../util/errors";
 
 export type MocaStakeForwarderInput = {
   chain: string;
@@ -43,7 +45,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
   }
 
-  async prepare(input: MocaStakeForwarderInput): Promise<PrepareResult<StakingEvent[]>> {
+  async prepare(input: MocaStakeForwarderInput): Promise<Result<StakingEvent[], PluginError>> {
     const rpcUrl = this.getRpcUrl(input.chain);
     const provider = new JsonRpcProvider(rpcUrl);
     const throttler = Throttler.getInstance(input.chain);
@@ -55,22 +57,22 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     const logIndex = input.event.index;
 
     // Check that transaction exists
-    const transaction = await throttler.execute(() => 
+    const transaction = await throttler.execute(() =>
       provider.getTransaction(transactionHash)
     );
-    if (!transaction) return { status: "failure" };
+    if (!transaction) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
 
     // Verify transaction was included in a block
-    if (!transaction.blockNumber) return { status: "failure" };
+    if (!transaction.blockNumber) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
 
     // Get transaction receipt to access logs
-    const receipt = await throttler.execute(() => 
+    const receipt = await throttler.execute(() =>
       provider.getTransactionReceipt(transactionHash)
     );
-    if (!receipt) return { status: "failure" };
+    if (!receipt) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
 
     // Verify that the transaction was successful
-    if (receipt.status !== 1) return { status: "failure" };
+    if (receipt.status !== 1) return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
 
     // Find the matching log in the receipt
     const matchingLog = receipt.logs.find(log =>
@@ -79,13 +81,13 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
       log.address.toLowerCase() === contractAddress.toLowerCase()
     );
 
-    if (!matchingLog) return { status: "failure" };
+    if (!matchingLog) return err({ type: "prepare_error", context: `Log not found in transaction ${transactionHash} at block ${blockNumber}` });
 
     // Additional verification: check that the topics/data match
     if (input.event.topics.length !== matchingLog.topics.length ||
       !input.event.topics.every((topic, i) => topic === matchingLog.topics[i]) ||
       input.event.data !== matchingLog.data) {
-      return { status: "failure" };
+      return err({ type: "prepare_error", context: `Log does not match expected event` });
     }
 
     logger.info(`Verified event from transaction ${transactionHash} at block ${blockNumber}`);
@@ -98,37 +100,34 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
       return this.handleUnstaked(input);
     }
 
-    return { status: "failure" };
+    return err({ type: "prepare_error", context: `Invalid event name: ${input.eventName}` });
   }
 
-  private handleStaked(input: MocaStakeForwarderInput): PrepareResult<StakingEvent[]> {
+  private handleStaked(input: MocaStakeForwarderInput): Result<StakingEvent[], PluginError> {
     const from = this.safelyExtractAddress(input.event.topics[1]);
-    if (!from) return { status: "failure" };
+    if (!from) return err({ type: "prepare_error", context: `Invalid log topics` });
 
     const amount = BigInt(input.event.data);
 
-    return {
-      status: "success",
-      data: [{
-        chain: input.chain,
-        blockNumber: input.event.blockNumber,
-        transactionHash: input.event.transactionHash,
-        logIndex: input.event.index,
-        contractAddress: input.event.address,
-        from,
-        amount,
-        type: "staked"
-      }]
-    }
+    return ok([{
+      chain: input.chain,
+      blockNumber: input.event.blockNumber,
+      transactionHash: input.event.transactionHash,
+      logIndex: input.event.index,
+      contractAddress: input.event.address,
+      from,
+      amount,
+      type: "staked"
+    }]);
   }
 
-  private handleStakedBehalf(input: MocaStakeForwarderInput, tx: TransactionResponse): PrepareResult<StakingEvent[]> {
+  private handleStakedBehalf(input: MocaStakeForwarderInput, tx: TransactionResponse): Result<StakingEvent[], PluginError> {
     const iface = new Interface([
       'function stakeBehalf(address[] calldata users, uint256[] calldata amounts)'
     ]);
 
     const decodedInput = iface.parseTransaction({ data: tx.data, value: tx.value });
-    if (!decodedInput || !decodedInput.args) return { status: "failure" };
+    if (!decodedInput || !decodedInput.args) return err({ type: "prepare_error", context: `Invalid transaction input` });
 
     const users = decodedInput.args[0] || [];
     const amounts = decodedInput.args[1] || [];
@@ -155,41 +154,36 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
       }
     }
 
-    return {
-      status: "success",
-      data: events
-    }
+    return ok(events);
   }
 
-  private handleUnstaked(input: MocaStakeForwarderInput): PrepareResult<StakingEvent[]> {
+  private handleUnstaked(input: MocaStakeForwarderInput): Result<StakingEvent[], PluginError> {
     const from = this.safelyExtractAddress(input.event.topics[1]);
-    if (!from) return { status: "failure" };
+    if (!from) return err({ type: "prepare_error", context: `Invalid log topics` });
 
     const amount = BigInt(input.event.data);
-    
-    return {
-      status: "success",
-      data: [{
-        chain: input.chain,
-        blockNumber: input.event.blockNumber,
-        transactionHash: input.event.transactionHash,
-        logIndex: input.event.index,
-        contractAddress: input.event.address,
-        from,
-        amount,
-        type: "unstaked"
-      }]
-    }
+
+    return ok([{
+      chain: input.chain,
+      blockNumber: input.event.blockNumber,
+      transactionHash: input.event.transactionHash,
+      logIndex: input.event.index,
+      contractAddress: input.event.address,
+      from,
+      amount,
+      type: "unstaked"
+    }]);
   }
 
-  async process(input: ProcessInput<StakingEvent[]>[]): Promise<ProcessResult<GTX>> {
+  async process(input: ProcessInput<StakingEvent[]>[]): Promise<Result<GTX, PluginError>> {
     const emptyGtx = gtx.emptyGtx(this._blockchainRid);
     const selectedInput = input[Math.floor(Math.random() * input.length)];
-    if (!selectedInput) throw new Error(`No input data`);
+    if (!selectedInput) return err({ type: "process_error", context: `No input data` });
 
     let tx: GTX = emptyGtx;
+    let i = 0;
     for (const event of selectedInput.data) {
-      const eventId = `${event.transactionHash}-${event.logIndex}`;
+      const eventId = `${event.transactionHash}-${event.logIndex}-${i++}`;
       if (event.type === "staked" || event.type === "staked_behalf") {
         tx = gtx.addTransactionToGtx('evm.erc20.mint', [
           event.chain,
@@ -215,14 +209,11 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     }
 
     tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
-    
-    return {
-      status: "success",
-      data: tx
-    };
+
+    return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: StakingEvent[]): Promise<ValidateResult<GTX>> {
+  async validate(gtx: GTX, preparedData: StakingEvent[]): Promise<Result<GTX, PluginError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -233,13 +224,10 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
       gtx.signatures = [signature];
     }
 
-    return {
-      status: "success",
-      data: gtx
-    };
+    return ok(gtx);
   }
 
-  async execute(_gtx: GTX): Promise<ExecuteResult<boolean>> {
+  async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
     logger.info(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
@@ -258,8 +246,8 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
         throw error;
       }
     }
-    
-    return { status: "success", data: true };
+
+    return ok(true);
   }
 
   private getRpcUrl(chain: string) {
@@ -276,13 +264,17 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
   private safelyExtractAddress(topic: string | undefined): string | undefined {
     if (!topic) return undefined;
 
-    try {
-      // First, try to use ethers to parse the address
-      return getAddress(dataSlice(topic, 12));
-    } catch (error) {
-      // If that fails, fall back to our original method
-      logger.info(`Failed to parse address using ethers: ${error}. Falling back to manual extraction.`);
-      return ethers.getAddress('0x' + topic.slice(-40));
+    const result = Result.fromThrowable(
+      () => getAddress(dataSlice(topic, 12)),
+      (error): PluginError => ({ type: "execute_error", context: `Failed to parse address using primary method: ${error}` })
+    )();
+
+    if (result.isOk()) {
+      return result.value;
     }
+
+    // If that fails, fall back to our original method
+    logger.info(`Failed to parse address using ethers: ${result.error}. Falling back to manual extraction.`);
+    return ethers.getAddress('0x' + topic.slice(-40));
   }
 }

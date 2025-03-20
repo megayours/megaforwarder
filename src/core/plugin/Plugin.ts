@@ -1,7 +1,9 @@
+import type { Result } from "neverthrow";
 import config from "../../config";
 import type { IPlugin } from "../interfaces/IPlugin";
 import type { PluginMetadata } from "../types/PluginMetadata";
-import type { PrepareResult, ProcessInput, ProcessResult, ValidateResult, ExecuteResult } from "../types/Protocol";
+import type { ProcessInput } from "../types/Protocol";
+import type { PluginError } from "../../util/errors";
 
 export abstract class Plugin<TPluginInput, TPrepareOutput, TValidateData, TPluginOutput> implements IPlugin<TPluginInput, TPrepareOutput, TValidateData, TPluginOutput> {
   private _metadata: PluginMetadata;
@@ -24,8 +26,8 @@ export abstract class Plugin<TPluginInput, TPrepareOutput, TValidateData, TPlugi
     return this._config;
   }
 
-  abstract prepare(input: TPluginInput): Promise<PrepareResult<TPrepareOutput>>;
-  abstract process(preparedOutputs: ProcessInput<TPrepareOutput>[]): Promise<ProcessResult<TValidateData>>;
-  abstract validate(dataToValidate: TValidateData, preparedData: TPrepareOutput): Promise<ValidateResult<TValidateData>>;
-  abstract execute(finalData: TValidateData): Promise<ExecuteResult<TPluginOutput>>;
+  abstract prepare(input: TPluginInput): Promise<Result<TPrepareOutput, PluginError>>;
+  abstract process(preparedOutputs: ProcessInput<TPrepareOutput>[]): Promise<Result<TValidateData, PluginError>>;
+  abstract validate(dataToValidate: TValidateData, preparedData: TPrepareOutput): Promise<Result<TValidateData, PluginError>>;
+  abstract execute(finalData: TValidateData): Promise<Result<TPluginOutput, PluginError>>;
 }

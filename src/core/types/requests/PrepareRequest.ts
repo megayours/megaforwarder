@@ -4,7 +4,6 @@ export type PrepareRequest<T> = {
 }
 
 export type PrepareResponse = {
-  status: "success" | "failure";
   encodedData: string;
   signature: string;
 }

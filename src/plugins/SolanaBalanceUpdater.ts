@@ -2,11 +2,13 @@ import { Plugin } from "../core/plugin/Plugin";
 import type { PrepareResult, ProcessInput, ProcessResult, ValidateResult, ExecuteResult } from "../core/types/Protocol";
 import { logger } from "../util/monitoring";
 import config from "../config";
-import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
+import { createClient, getDigestToSignFromRawGtxBody, gtx, ResponseStatus, type GTX, type RawGtxBody } from "postchain-client";
 import { ecdsaSign } from "secp256k1";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
 import { Throttler } from "../util/throttle";
+import { err, ok, ResultAsync, type Result } from "neverthrow";
+import type { PluginError } from "../util/errors";
 
 type SolanaBalanceUpdaterInput = {
   tokenMint: string;
@@ -20,7 +22,6 @@ type BalanceUpdateEvent = {
 };
 
 type SolanaBalanceUpdaterOutput = {
-  status: "success" | "failure";
   message?: string;
 };
 
@@ -33,102 +34,89 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
 
   constructor() {
     super({ id: SolanaBalanceUpdater.pluginId });
-    
+
     const solanaRpcUrl = config.rpc["solana"]?.[0];
     if (!solanaRpcUrl) throw new Error("No Solana RPC URL found");
-    
+
     this._connection = new Connection(solanaRpcUrl);
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
     this._megaYoursBlockchainRid = Buffer.from(config.abstractionChain.blockchainRid, "hex");
   }
 
-  async prepare(input: SolanaBalanceUpdaterInput): Promise<PrepareResult<BalanceUpdateEvent>> {
+  async prepare(input: SolanaBalanceUpdaterInput): Promise<Result<BalanceUpdateEvent, PluginError>> {
     logger.info(`Preparing balance update for user account`, {
       tokenMint: input.tokenMint,
       decimals: input.decimals,
       userAccount: input.userAccount
     });
 
-    try {
-      // Convert string addresses to PublicKeys
-      const mintPubkey = new PublicKey(input.tokenMint);
-      const userPubkey = new PublicKey(input.userAccount);
-      
-      // Get the associated token address for this user and token mint
-      let tokenAddress;
-      try {
-        tokenAddress = await getAssociatedTokenAddress(
+    // Convert string addresses to PublicKeys
+    const mintPubkey = new PublicKey(input.tokenMint);
+    const userPubkey = new PublicKey(input.userAccount);
+
+    // Get the associated token address for this user and token mint
+    const tokenAddress = await this._throttler.execute(() =>
+      ResultAsync.fromPromise(
+        getAssociatedTokenAddress(
           mintPubkey,
           userPubkey,
           true // Allow owner off curve
-        );
-      } catch (err: any) {
-        logger.warn(`Error getting associated token address: ${err.message}`, {
-          tokenMint: input.tokenMint,
-          userAccount: input.userAccount,
-          error: err
-        });
-        
-        return { status: "failure" };
-      }
-      
-      logger.info(`Looking up token balance for address ${tokenAddress.toString()}`);
-      
-      // Get the token account info to fetch balance
-      let balance = "0";
-      
-      try {
-        // Use throttler to avoid rate limiting
-        const tokenAccount = await this._throttler.execute(() => 
-          getAccount(this._connection, tokenAddress)
-        );
-        
-        // Extract balance from token account
-        balance = tokenAccount.amount.toString();
-        
-        logger.info(`Retrieved token balance: ${balance}`);
-      } catch (error: any) {
-        // If the user doesn't have a token account yet, the balance is 0
-        logger.info(`Could not find token account, assuming balance is 0: ${error.message || 'Unknown error'}`);
-      }
-      
-      // For a balance update, pass the token mint, user account, and current balance to the Chromia blockchain
-      return {
-        status: "success",
-        data: {
-          operation: "solana.spl.balance_update",
-          args: [
-            input.tokenMint,
-            input.userAccount,
-            BigInt(balance),
-            input.decimals
-          ]
-        }
-      };
-    } catch (error: any) {
-      logger.error(`Error in SolanaBalanceUpdater:`, {
-        error,
-        message: error.message,
-        stack: error.stack,
-        tokenMint: input.tokenMint,
-        userAccount: input.userAccount
-      });
-      return { status: "failure" };
+        ),
+        (error): PluginError => ({ type: "prepare_error", context: `Error getting associated token address: ${error}` })
+      )
+    );
+
+    if (tokenAddress.isErr()) {
+      return err({ type: "prepare_error", context: `Error getting associated token address: ${tokenAddress.error}` });
     }
+
+    logger.info(`Looking up token balance for address ${tokenAddress.toString()}`);
+
+    // Get the token account info to fetch balance
+    let balance = "0";
+
+    // Use throttler to avoid rate limiting
+    const tokenAccount = await this._throttler.execute(() =>
+      ResultAsync.fromPromise(
+        getAccount(this._connection, tokenAddress.value),
+        (error): PluginError => ({ type: "prepare_error", context: `Error getting token account: ${error}` })
+      )
+    );
+
+    if (tokenAccount.isErr()) {
+      return err({ type: "prepare_error", context: `Error getting token account: ${tokenAccount.error}` });
+    }
+
+    // Extract balance from token account
+    balance = tokenAccount.value.amount.toString();
+
+    logger.info(`Retrieved token balance: ${balance}`);
+
+    // For a balance update, pass the token mint, user account, and current balance to the Chromia blockchain
+    return ok({
+      operation: "solana.spl.balance_update",
+      args: [
+        input.tokenMint,
+        input.userAccount,
+        BigInt(balance),
+        input.decimals
+      ]
+    });
   }
 
-  async process(input: ProcessInput<BalanceUpdateEvent>[]): Promise<ProcessResult<GTX>> {
+  async process(input: ProcessInput<BalanceUpdateEvent>[]): Promise<Result<GTX, PluginError>> {
     const selectedData = input[0];
-    if (!selectedData) return { status: "failure" };
+    if (!selectedData) return err({ type: "process_error", context: `No input data` });
+
     const { operation, args }: BalanceUpdateEvent = selectedData.data;
 
     const emptyGtx = gtx.emptyGtx(this._megaYoursBlockchainRid);
     const tx = gtx.addTransactionToGtx(operation, args, emptyGtx);
     tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
-    return { status: "success", data: tx };
+    return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: BalanceUpdateEvent): Promise<ValidateResult<GTX>> {
+  async validate(gtx: GTX, preparedData: BalanceUpdateEvent): Promise<Result<GTX, PluginError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -139,10 +127,10 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
       gtx.signatures = [signature];
     }
 
-    return { status: "success", data: gtx };
+    return ok(gtx);
   }
 
-  async execute(_gtx: GTX): Promise<ExecuteResult<SolanaBalanceUpdaterOutput>> {
+  async execute(_gtx: GTX): Promise<Result<SolanaBalanceUpdaterOutput, PluginError>> {
     logger.info(`Executing GTX for balance update`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
@@ -152,32 +140,20 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     try {
       await client.sendTransaction(gtx.serialize(_gtx));
       logger.info(`Balance update forwarded successfully`);
-      return { 
-        status: "success",
-        data: {
-          status: "success"
-        }
-      };
+      return ok({
+        message: "Balance update forwarded successfully"
+      });
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
       if (error.status === 409) {
         logger.info(`Transaction already in database, considering as success`);
-        return { 
-          status: "success",
-          data: {
-            status: "success"
-          }
-        };
+        return ok({
+          message: "Balance update forwarded successfully"
+        });
       } else {
         // Log and return failure for any other error
         logger.error(`Failed to update balance:`, error);
-        return { 
-          status: "failure",
-          data: {
-            status: "failure",
-            message: `Error: ${error}`
-          }
-        };
+        return err({ type: "execute_error", context: `Error: ${error}` });
       }
     }
   }

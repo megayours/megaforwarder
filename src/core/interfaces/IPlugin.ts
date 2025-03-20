@@ -1,5 +1,7 @@
+import type { Result } from "neverthrow";
 import type { PluginMetadata } from "../types/PluginMetadata";
-import type { ExecuteResult, PrepareResult, ProcessInput, ProcessResult, ValidateResult } from "../types/Protocol";
+import type { ProcessInput } from "../types/Protocol";
+import type { PluginError } from "../../util/errors";
 
 /**
  * Interface that all plugins must implement to be compatible with the oracle network.
@@ -11,7 +13,7 @@ export interface IPlugin<TPluginInput, TPrepareOutput, TValidateData, TPluginOut
    * @param input The input data to validate
    * @returns The validation result
    */
-  prepare(input: TPluginInput): Promise<PrepareResult<TPrepareOutput>>;
+  prepare(input: TPluginInput): Promise<Result<TPrepareOutput, PluginError>>;
   
   /**
    * Is only executed on the primary node in order to prepare data for the secondary nodes to validate.
@@ -19,7 +21,7 @@ export interface IPlugin<TPluginInput, TPrepareOutput, TValidateData, TPluginOut
    * @param preparedOutputs The outputs with a majority consensus to prepare a transaction for
    * @returns A Buffer representing the transaction
    */
-  process(preparedOutputs: ProcessInput<TPrepareOutput>[]): Promise<ProcessResult<TValidateData>>;
+  process(preparedOutputs: ProcessInput<TPrepareOutput>[]): Promise<Result<TValidateData, PluginError>>;
 
   /**
    * Is executed on all secondary nodes in order to validate the data.
@@ -28,12 +30,12 @@ export interface IPlugin<TPluginInput, TPrepareOutput, TValidateData, TPluginOut
    * @param myPreparedOutput The output of my previous prepare step
    * @returns The validation result
    */
-  validate(dataToValidate: TValidateData, preparedData: TPrepareOutput): Promise<ValidateResult<TValidateData>>;
+  validate(dataToValidate: TValidateData, preparedData: TPrepareOutput): Promise<Result<TValidateData, PluginError>>;
   
   /**
    * Execute the final transaction after all signatures are collected
    * @param finalData The data to execute
    * @returns The execution result
    */
-  execute(finalData: TValidateData): Promise<ExecuteResult<TPluginOutput>>;
+  execute(finalData: TValidateData): Promise<Result<TPluginOutput, PluginError>>;
 }

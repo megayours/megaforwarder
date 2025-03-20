@@ -4,12 +4,10 @@ export type SignatureData = {
 }
 
 export type PrepareResult<T> = {
-  status: "success" | "failure";
   data?: T;
 };
 
 export type ProtocolPrepareResult<T> = {
-  status: "success" | "failure";
   data: T;
   signatureData: SignatureData | null;
   encodedData: string;
@@ -21,16 +19,13 @@ export type ProcessInput<T> = {
 }
 
 export type ProcessResult<T> = {
-  status: "success" | "failure";
   data?: T;
 };
 
 export type ValidateResult<T> = {
-  status: "success" | "failure";
   data?: T;
 };
 
 export type ExecuteResult<T> = {
-  status: "success" | "failure";
   data?: T;
 };

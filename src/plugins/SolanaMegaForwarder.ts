@@ -1,10 +1,12 @@
 import { Connection, type VersionedTransactionResponse } from "@solana/web3.js";
-import type { PrepareResult, ProcessInput, ProcessResult, ValidateResult } from "../core/types/Protocol";
+import type { ProcessInput } from "../core/types/Protocol";
 import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import config from "../config";
 import { ecdsaSign } from "secp256k1";
 import { Plugin } from "../core/plugin/Plugin";
 import { logger } from "../util/monitoring";
+import { err, ok, type Result } from "neverthrow";
+import type { PluginError } from "../util/errors";
 
 type SolanaMegaForwarderInput = {
   txSignature: string;
@@ -15,16 +17,12 @@ type Event = {
   args: any[];
 }
 
-type SolanaMegaForwarderOutput = {
-  status: "success" | "failure";
-}
-
 type TokenRegistration = {
   address: string;
   properties: any;
 }
 
-export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event, GTX, SolanaMegaForwarderOutput> {
+export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event, GTX, boolean> {
   static readonly pluginId = "solana-mega-forwarder";
 
   protected readonly _connection: Connection;
@@ -45,53 +43,48 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     this._megaYoursBlockchainRid = Buffer.from(config.abstractionChain.blockchainRid, "hex");
   }
 
-  handleTokenRegistration(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): PrepareResult<Event> {
+  handleTokenRegistration(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): Result<Event, PluginError> {
     const { address, properties } = data;
 
     logger.info(`New token Registration`, address);
 
-    return { 
-      status: "success",
-      data: {
-        operation: "solana.megadata.register_token", 
-        args: [
+    return ok({
+      operation: "solana.megadata.register_token",
+      args: [
           transaction.slot,
           signature,
           address,
           0,
-          JSON.stringify(properties)
-        ] 
-      } };
+        JSON.stringify(properties)
+      ]
+    });
   }
 
-  handleTokenUpdate(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): PrepareResult<Event> {
+  handleTokenUpdate(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): Result<Event, PluginError> {
     const { address, properties } = data;
 
     logger.info(`New token Update`, address);
     
-    return {
-      status: "success",
-      data: {
-        operation: "solana.megadata.update_metadata",
-        args: [transaction.slot, signature, address, JSON.stringify(properties)]
-      }
-    }
+    return ok({
+      operation: "solana.megadata.update_metadata",
+      args: [transaction.slot, signature, address, JSON.stringify(properties)]
+    });
   }
 
-  async prepare(input: SolanaMegaForwarderInput): Promise<PrepareResult<Event>> {
+  async prepare(input: SolanaMegaForwarderInput): Promise<Result<Event, PluginError>> {
     const transaction = await this._connection.getTransaction(input.txSignature, {
       commitment: "confirmed",
       maxSupportedTransactionVersion: 0,
     });
 
     if (!transaction) {
-      return { status: "failure" }
+      return err({ type: "prepare_error", context: `Transaction not found` });
     }
 
     const logs = transaction.meta?.logMessages;
 
     if (!logs) {
-      return { status: "failure" }
+      return err({ type: "prepare_error", context: `No logs found` });
     }
 
     // Find signer, operation name and parameter from logs
@@ -100,7 +93,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     const paramLog = logs.find(log => log.includes('Parameter:'));
 
     if (!signerLog || !operationLog || !paramLog) {
-      return { status: "failure" }
+      return err({ type: "prepare_error", context: `No logs found` });
     }
 
     // Extract values from logs
@@ -111,7 +104,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     logger.info(`Param: ${paramParts[1]?.trim()}`);
 
     if (operationParts.length < 2 || paramParts.length < 2) {
-      return { status: "failure" }
+      return err({ type: "prepare_error", context: `No logs found` });
     }
 
     const operation = operationParts[1]!.trim();
@@ -124,22 +117,22 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     } else {
       const args = [param];
       logger.info(`Misc operation`, operation);
-      return { status: "success", data: { operation, args } };
+      return ok({ operation, args });
     }
   }
 
-  async process(input: ProcessInput<Event>[]): Promise<ProcessResult<GTX>> {
+  async process(input: ProcessInput<Event>[]): Promise<Result<GTX, PluginError>> {
     const selectedData = input[0];
-    if (!selectedData) return { status: "failure" };
+    if (!selectedData) return err({ type: "process_error", context: `No input data` });
     const { operation, args }: Event = selectedData.data;
 
     const emptyGtx = gtx.emptyGtx(this._megaYoursBlockchainRid);
     const tx = gtx.addTransactionToGtx(operation, args, emptyGtx);
     tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
-    return { status: "success", data: tx };
+    return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: Event): Promise<ValidateResult<GTX>> {
+  async validate(gtx: GTX, preparedData: Event): Promise<Result<GTX, PluginError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -150,10 +143,10 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
       gtx.signatures = [signature];
     }
 
-    return { status: "success", data: gtx }
+    return ok(gtx);
   }
 
-  async execute(_gtx: GTX): Promise<SolanaMegaForwarderOutput> {
+  async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
     logger.info(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
@@ -171,7 +164,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
         logger.error(`Error executing transaction`, error);
       }
     }
-    
-    return { status: "success" };
+
+    return ok(true);
   }
 }

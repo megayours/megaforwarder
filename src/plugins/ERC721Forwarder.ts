@@ -2,7 +2,7 @@ import type { Log } from "ethers";
 import { Plugin } from "../core/plugin/Plugin";
 import type { EventLog } from "ethers";
 import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
-import type { ExecuteResult, PrepareResult, ProcessInput, ProcessResult, ValidateResult } from "../core/types/Protocol";
+import type { ProcessInput } from "../core/types/Protocol";
 import { logger } from "../util/monitoring";
 import { JsonRpcProvider } from "ethers/providers";
 import { Contract, dataSlice, ethers } from "ethers";
@@ -12,6 +12,8 @@ import config from "../config";
 import { hexToBuffer } from "../util/hex";
 import { Throttler } from "../util/throttle";
 import erc721Abi from "../util/abis/erc721";
+import { err, ok, type Result } from "neverthrow";
+import type { PluginError } from "../util/errors";
 
 export type ERC721ForwarderInput = {
   chain: string;
@@ -30,7 +32,7 @@ type ERC721Event = {
   to: string;
   metadata: string | undefined;
   tokenUri: string | undefined;
-  collection: string | undefined; 
+  collection: string | undefined;
 }
 
 export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, GTX, boolean> {
@@ -44,12 +46,12 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     this._blockchainRid = Buffer.from(config.abstractionChain.blockchainRid, 'hex');
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
   }
-  
-  async prepare(input: ERC721ForwarderInput): Promise<PrepareResult<ERC721Event>> {
+
+  async prepare(input: ERC721ForwarderInput): Promise<Result<ERC721Event, PluginError>> {
     const rpcUrl = this.getRpcUrl(input.chain);
     const provider = new JsonRpcProvider(rpcUrl);
     const throttler = Throttler.getInstance(input.chain);
-    
+
     // Validate input event was actually an event
     const contractAddress = input.event.address;
     const transactionHash = input.event.transactionHash;
@@ -57,55 +59,55 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     const logIndex = input.event.index;
 
     // Check that transaction exists
-    const transaction = await throttler.execute(() => 
+    const transaction = await throttler.execute(() =>
       provider.getTransaction(transactionHash)
     );
-    if (!transaction) return { status: "failure" };
-    
+    if (!transaction) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
+
     // Verify transaction was included in a block
-    if (!transaction.blockNumber) return { status: "failure" };
-    
+    if (!transaction.blockNumber) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
+
     // Get transaction receipt to access logs
-    const receipt = await throttler.execute(() => 
+    const receipt = await throttler.execute(() =>
       provider.getTransactionReceipt(transactionHash)
     );
-    if (!receipt) return { status: "failure" };
-    
+    if (!receipt) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
+
     // Verify that the transaction was successful
-    if (receipt.status !== 1) return { status: "failure" };
-    
+    if (receipt.status !== 1) return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
+
     // Find the matching log in the receipt
-    const matchingLog = receipt.logs.find(log => 
-      log.blockNumber === blockNumber && 
+    const matchingLog = receipt.logs.find(log =>
+      log.blockNumber === blockNumber &&
       log.index === logIndex &&
       log.address.toLowerCase() === contractAddress.toLowerCase()
     );
-    
-    if (!matchingLog) return { status: "failure" };
-    
+
+    if (!matchingLog) return err({ type: "prepare_error", context: `Log not found in transaction ${transactionHash} at block ${blockNumber}` });
+
     // Additional verification: check that the topics/data match
     if (input.event.topics.length !== matchingLog.topics.length ||
-        !input.event.topics.every((topic, i) => topic === matchingLog.topics[i]) ||
-        input.event.data !== matchingLog.data) {
-      return { status: "failure" };
+      !input.event.topics.every((topic, i) => topic === matchingLog.topics[i]) ||
+      input.event.data !== matchingLog.data) {
+      return err({ type: "prepare_error", context: `Log does not match expected event` });
     }
 
     logger.info(`Verified event from transaction ${transactionHash} at block ${blockNumber}`);
-    
+
     const from = this.safelyExtractAddress(matchingLog.topics[1]);
     const to = this.safelyExtractAddress(matchingLog.topics[2]);
 
-    if (!from || !to) return { status: "failure" };
-    
+    if (!from || !to) return err({ type: "prepare_error", context: `Invalid log topics` });
+
     const tokenIdString = matchingLog.topics[3];
-    if (!tokenIdString) return { status: "failure" };
+    if (!tokenIdString) return err({ type: "prepare_error", context: `Invalid log topics` });
     const tokenId = BigInt(tokenIdString);
 
     let tokenUri: string | undefined;
     let metadata: string | undefined;
     if (this.isZeroAddress(from)) {
       const contract = new Contract(contractAddress, erc721Abi, provider);
-      if (!contract.tokenURI) return { status: "failure" };
+      if (!contract.tokenURI) return err({ type: "prepare_error", context: `Token URI not found on contract` });
 
       tokenUri = await throttler.execute(() => {
         // Ensure tokenURI exists before calling it
@@ -121,28 +123,25 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       metadata = JSON.stringify(json);
     }
 
-    return {
-      status: "success",
-      data: {
-        chain: input.chain,
-        blockNumber,
-        transactionHash,
-        logIndex,
-        contractAddress,
-        tokenId,
-        from,
-        to,
-        metadata,
-        tokenUri: tokenUri,
-        collection: input.collection
-      }
-    };
+    return ok({
+      chain: input.chain,
+      blockNumber,
+      transactionHash,
+      logIndex,
+      contractAddress,
+      tokenId,
+      from,
+      to,
+      metadata,
+      tokenUri: tokenUri,
+      collection: input.collection
+    });
   }
 
-  async process(input: ProcessInput<ERC721Event>[]): Promise<ProcessResult<GTX>> {
+  async process(input: ProcessInput<ERC721Event>[]): Promise<Result<GTX, PluginError>> {
     const emptyGtx = gtx.emptyGtx(this._blockchainRid);
     const selectedInput = input[Math.floor(Math.random() * input.length)];
-    if (!selectedInput) throw new Error(`No input data`);
+    if (!selectedInput) return err({ type: "process_error", context: `No input data` });
 
     const eventId = `${selectedInput.data.transactionHash}-${selectedInput.data.logIndex}`;
 
@@ -172,14 +171,11 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     }
 
     tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
-    
-    return {
-      status: "success",
-      data: tx
-    };
+
+    return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: ERC721Event): Promise<ValidateResult<GTX>> {
+  async validate(gtx: GTX, preparedData: ERC721Event): Promise<Result<GTX, PluginError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -190,13 +186,10 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       gtx.signatures = [signature];
     }
 
-    return {
-      status: "success",
-      data: gtx
-    };
+    return ok(gtx);
   }
 
-  async execute(_gtx: GTX): Promise<ExecuteResult<boolean>> {
+  async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
     logger.info(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
@@ -215,8 +208,8 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
         throw error;
       }
     }
-    
-    return { status: "success", data: true };
+
+    return ok(true);
   }
 
   private getRpcUrl(chain: string) {

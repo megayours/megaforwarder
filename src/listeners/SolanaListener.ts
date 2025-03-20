@@ -127,8 +127,8 @@ export class SolanaListener extends Listener implements IListener {
         if (tx) {
           if (tx.meta?.logMessages?.some(log => log.includes('Operation name:'))) {
             const task = new Task(SolanaMegaForwarder.pluginId, { txSignature: sig.signature });
-            const success = await task.start();
-            if (!success) {
+            const result = await task.start();
+            if (result.isErr()) {
               logger.error(`Failed to handle transaction: ${sig.signature}`);
               return;
             }

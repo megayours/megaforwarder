@@ -6,6 +6,5 @@ export type ValidateRequest = {
 };
 
 export type ValidateResponse = {
-  status: "success" | "failure";
   encodedData?: string;
 }

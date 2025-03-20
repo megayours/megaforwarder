@@ -12,6 +12,8 @@ import { ERC20Forwarder, type ERC20ForwarderInput } from "../plugins/ERC20Forwar
 import { MocaStakeForwarder, type MocaStakeForwarderInput } from "../plugins/MocaStakeForwarder";
 import { Throttler } from "../util/throttle";
 import config from "../config";
+import type { ListenerError } from "../util/errors";
+import { err, ok, Result } from "neverthrow";
 
 export type ContractInfo = {
   chain: "ethereum";
@@ -79,7 +81,7 @@ export class EVMListener extends Listener {
 
     for (const event of this.sortEvents(events)) {
       const success = await this.handleEvent(event);
-      if (!success) {
+      if (success.isErr() || !success.value) {
         logger.error(`Failed to handle event: ${event.event.transactionHash}`);
         return;
       }
@@ -131,7 +133,7 @@ export class EVMListener extends Listener {
     });
   }
 
-  private async handleEvent(event: EventWrapper): Promise<boolean> {
+  private async handleEvent(event: EventWrapper): Promise<Result<boolean, ListenerError>> {
     if (this._contractInfo.type === "erc721") {
       const input: ERC721ForwarderInput = {
         chain: this._contractInfo.chain,
@@ -140,25 +142,43 @@ export class EVMListener extends Listener {
       }
       logger.info(`Handling ERC721 event`, event.event);
       const task = new Task(ERC721Forwarder.pluginId, input);
-      return task.start();
-    } else if (this._contractInfo.type === "erc20") {
+      const result = await task.start();
+      if (result.isErr()) {
+        return err({ type: "task_error", context: result.error.type });
+      }
+      return ok(result.value);
+    } 
+    
+    else if (this._contractInfo.type === "erc20") {
       const input: ERC20ForwarderInput = {
         chain: this._contractInfo.chain,
         event: event.event
       }
       const task = new Task(ERC20Forwarder.pluginId, input);
-      return task.start();
-    } else if (this._contractInfo.type === "moca_stake") {
+      const result = await task.start();
+      if (result.isErr()) {
+        return err({ type: "task_error", context: result.error.type });
+      }
+      return ok(result.value);
+    } 
+    
+    else if (this._contractInfo.type === "moca_stake") {
       const input: MocaStakeForwarderInput = {
         chain: this._contractInfo.chain,
         eventName: event.name,
         event: event.event
       }
       const task = new Task(MocaStakeForwarder.pluginId, input);
-      return task.start();
-    } else {
+      const result = await task.start();
+      if (result.isErr()) {
+        return err({ type: "task_error", context: result.error.type });
+      }
+      return ok(result.value);
+    } 
+    
+    else {
       logger.error(`Unsupported contract type: ${this._contractInfo.type}`);
-      return false;
+      return err({ type: "unsupported_contract_type" });
     }
   }
 }

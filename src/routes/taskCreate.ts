@@ -1,26 +1,33 @@
-import { PluginNotFound } from "../core/errors/PluginNotFound";
+import { Result } from "neverthrow";
 import { Task } from "../core/task/Task";
 import type { TaskCreationRequest } from "../core/types/requests/TaskCreationRequest";
+import type { TaskError } from "../util/errors";
 
 const taskCreate = async (req: Request) => {
-  try {
-    const body = await req.json() as TaskCreationRequest;
-    const task = new Task(body.pluginId, body.input);
-    await task.start();
-    return new Response("OK");
-  } catch (error: any) {
-    if (error instanceof PluginNotFound) {
-      return new Response(JSON.stringify({ error: error.message }), { 
-        status: 404,
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-    console.error("Error processing task:", error);
-    return new Response(JSON.stringify({ error: error.message }), { 
+  const body = await req.json() as TaskCreationRequest;
+  const task = Result.fromThrowable(
+    () => new Task(body.pluginId, body.input),
+    (error): TaskError => ({
+      type: 'plugin_error',
+      context: `Failed to create task: ${error}`
+    })
+  )();
+  if (task.isErr()) {
+    return new Response(JSON.stringify({ error: task.error.type, context: task.error.context }), {
       status: 500,
       headers: { "Content-Type": "application/json" }
     });
   }
+
+  const result = await task.value.start();
+  if (result.isErr()) {
+    return new Response(JSON.stringify({ error: result.error.type, context: result.error.context }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
+  return new Response("OK");
 };
 
 export default taskCreate;
