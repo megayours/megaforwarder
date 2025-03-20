@@ -16,13 +16,15 @@ services:
       - "traefik.http.routers.oracle1-public-secure.entrypoints=websecure"
       - "traefik.http.routers.oracle1-public-secure.tls=true"
       - "traefik.http.routers.oracle1-public-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.oracle1-public-secure.loadbalancer.server.port=5400"
+      - "traefik.http.routers.oracle1-public-secure.service=oracle1-public"
+      - "traefik.http.services.oracle1-public.loadbalancer.server.port=5400"
       # Internal HTTPS Router (Port 5300)
       - "traefik.http.routers.oracle1-internal-secure.rule=Host(`oracle1.int.testnet.megayours.com`)"
       - "traefik.http.routers.oracle1-internal-secure.entrypoints=websecure"
       - "traefik.http.routers.oracle1-internal-secure.tls=true"
       - "traefik.http.routers.oracle1-internal-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.oracle1-internal-secure.loadbalancer.server.port=5300"
+      - "traefik.http.routers.oracle1-internal-secure.service=oracle1-internal"
+      - "traefik.http.services.oracle1-internal.loadbalancer.server.port=5300"
     networks:
       - backend
       - traefik
@@ -44,13 +46,15 @@ services:
       - "traefik.http.routers.oracle2-public-secure.entrypoints=websecure"
       - "traefik.http.routers.oracle2-public-secure.tls=true"
       - "traefik.http.routers.oracle2-public-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.oracle2-public-secure.loadbalancer.server.port=5401"
+      - "traefik.http.routers.oracle2-public-secure.service=oracle2-public"
+      - "traefik.http.services.oracle2-public.loadbalancer.server.port=5401"
       # Internal HTTPS Router (Port 5300)
       - "traefik.http.routers.oracle2-internal-secure.rule=Host(`oracle2.int.testnet.megayours.com`)"
       - "traefik.http.routers.oracle2-internal-secure.entrypoints=websecure"
       - "traefik.http.routers.oracle2-internal-secure.tls=true"
       - "traefik.http.routers.oracle2-internal-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.oracle2-internal-secure.loadbalancer.server.port=5301"
+      - "traefik.http.routers.oracle2-internal-secure.service=oracle2-internal"
+      - "traefik.http.services.oracle2-internal.loadbalancer.server.port=5301"
     networks:
       - backend
       - traefik
@@ -72,13 +76,15 @@ services:
       - "traefik.http.routers.oracle3-public-secure.entrypoints=websecure"
       - "traefik.http.routers.oracle3-public-secure.tls=true"
       - "traefik.http.routers.oracle3-public-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.oracle3-public-secure.loadbalancer.server.port=5402"
+      - "traefik.http.routers.oracle3-public-secure.service=oracle3-public"
+      - "traefik.http.services.oracle3-public.loadbalancer.server.port=5402"
       # Internal HTTPS Router (Port 5300)
       - "traefik.http.routers.oracle3-internal-secure.rule=Host(`oracle3.int.testnet.megayours.com`)"
       - "traefik.http.routers.oracle3-internal-secure.entrypoints=websecure"
       - "traefik.http.routers.oracle3-internal-secure.tls=true"
       - "traefik.http.routers.oracle3-internal-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.oracle3-internal-secure.loadbalancer.server.port=5302"
+      - "traefik.http.routers.oracle3-internal-secure.service=oracle3-internal"
+      - "traefik.http.services.oracle3-internal.loadbalancer.server.port=5302"
     networks:
       - backend
       - traefik
