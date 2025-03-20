@@ -124,7 +124,6 @@ export class Task<T> {
       const signature = prepareResults.find((result) => result.publicKey === peer.publicKey)?.result.signatureData?.signature;
       if (!signature) return err({ type: "plugin_error", context: "No signature received from peer" });
 
-      logger.info(`Validating data from peer ${peer.publicKey}`, data);
       const validationResult = await requestValidate(peer, {
         pluginId: this.plugin.metadata.id,
         input: data,

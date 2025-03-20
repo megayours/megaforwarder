@@ -20,21 +20,20 @@ export class ListenerRegistry {
   }
 
   public register(listener: IListener) {
-    console.log(listener);
-    logger.info(`Registering listener ${listener.id}`);
+    logger.info(`Registering listener`, { listener: listener.id });
     this.listeners.push(listener);
   }
 
   public async start() {
     while (true) {
-      try {
-        for (const listener of this.listeners) {
+      for (const listener of this.listeners) {
+        try {
           logger.info(`Running listener ${listener.id}`);
           await listener.run();
           await sleep(config.listener.intervalMs);
+        } catch (error) {
+          logger.error("Critical error in listener registry loop", { error, listener: listener.id });
         }
-      } catch (error) {
-        logger.error("Critical error in listener registry loop", error);
       }
 
       await sleep(config.listener.intervalMs);
