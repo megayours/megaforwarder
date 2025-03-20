@@ -22,7 +22,7 @@ services:
       - "traefik.http.routers.oracle1-internal-secure.entrypoints=websecure"
       - "traefik.http.routers.oracle1-internal-secure.tls=true"
       - "traefik.http.routers.oracle1-internal-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.oracle1-internal.loadbalancer.server.port=5300"
+      - "traefik.http.services.oracle1-internal-secure.loadbalancer.server.port=5300"
     networks:
       - backend
       - traefik
@@ -50,7 +50,7 @@ services:
       - "traefik.http.routers.oracle2-internal-secure.entrypoints=websecure"
       - "traefik.http.routers.oracle2-internal-secure.tls=true"
       - "traefik.http.routers.oracle2-internal-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.oracle2-internal.loadbalancer.server.port=5301"
+      - "traefik.http.services.oracle2-internal-secure.loadbalancer.server.port=5301"
     networks:
       - backend
       - traefik
@@ -78,7 +78,7 @@ services:
       - "traefik.http.routers.oracle3-internal-secure.entrypoints=websecure"
       - "traefik.http.routers.oracle3-internal-secure.tls=true"
       - "traefik.http.routers.oracle3-internal-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.oracle3-internal.loadbalancer.server.port=5302"
+      - "traefik.http.services.oracle3-internal-secure.loadbalancer.server.port=5302"
     networks:
       - backend
       - traefik
