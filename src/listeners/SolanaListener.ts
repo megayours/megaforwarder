@@ -64,8 +64,10 @@ export class SolanaListener extends Listener implements IListener {
   }
 
   async run(): Promise<void> {
-    if (this._currentBlockHeight === -1) {
-      this._currentBlockHeight = await this.getSlot();
+    const previousIndexedSlot = await this.getSlot();
+
+    if (previousIndexedSlot > this._currentBlockHeight) {
+      this._currentBlockHeight = previousIndexedSlot + 1;
     }
 
     const connection = new Connection(this._rpcUrl);

@@ -56,8 +56,9 @@ export class EVMListener extends Listener {
     const provider = new JsonRpcProvider(rpcUrl);
     const contract = new Contract(this._contractInfo.contract, this._contractInfo.abi, provider);
 
-    if (this._currentBlockNumber === -1) {
-      this._currentBlockNumber = await this.initializeCurrentBlockNumber();
+    const previousIndexedBlockNumber = await this.initializeCurrentBlockNumber();
+    if (previousIndexedBlockNumber > this._currentBlockNumber) {
+      this._currentBlockNumber = previousIndexedBlockNumber;
     }
 
     let startBlock = this._currentBlockNumber + 1;
@@ -137,7 +138,7 @@ export class EVMListener extends Listener {
         collection: this._contractInfo.collection!,
         event: event.event
       }
-      logger.info(`Handling ERC721 event: ${event.event}`);
+      logger.info(`Handling ERC721 event`, event.event);
       const task = new Task(ERC721Forwarder.pluginId, input);
       return task.start();
     } else if (this._contractInfo.type === "erc20") {
