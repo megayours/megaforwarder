@@ -14,6 +14,7 @@ import { Throttler } from "../util/throttle";
 import config from "../config";
 import type { ListenerError } from "../util/errors";
 import { err, ok, Result } from "neverthrow";
+import { createCache, type Cache } from "cache-manager";
 
 export type ContractInfo = {
   chain: "ethereum";
@@ -34,6 +35,7 @@ type EventWrapper = {
 }
 
 export class EVMListener extends Listener {
+  private readonly _cache: Cache;
   private readonly _contractInfo: ContractInfo;
   private readonly _directoryNodeUrlPool: string[];
   private readonly _blockchainRid: string;
@@ -49,6 +51,7 @@ export class EVMListener extends Listener {
     this._blockchainRid = config.abstractionChain.blockchainRid;
     this._blockHeightIncrement = this.config["blockHeightIncrement"] as number;
     this._currentBlockNumber = -1;
+    this._cache = createCache({ ttl: this.config["cacheTtlMs"] as number });
     // Get throttler instance specific to this chain
     this._throttler = Throttler.getInstance(this._contractInfo.chain);
   }
@@ -63,7 +66,7 @@ export class EVMListener extends Listener {
       this._currentBlockNumber = previousIndexedBlockNumber;
     }
 
-    let startBlock = this._currentBlockNumber + 1;
+    let startBlock = this._currentBlockNumber;
 
     const currentBlockNumber = await this._throttler.execute(() => provider.getBlockNumber());
 
@@ -80,14 +83,26 @@ export class EVMListener extends Listener {
     }
 
     for (const event of this.sortEvents(events)) {
+      const cachedSuccess = await this._cache.get(this.uniqueId(event));
+      if (cachedSuccess) {
+        logger.info(`Skipping event ${this.uniqueId(event)} because it was already processed`);
+        continue;
+      }
+
       const success = await this.handleEvent(event);
       if (success.isErr() || !success.value) {
         logger.error(`Failed to handle event: ${event.event.transactionHash}`);
         return;
       }
+
+      this._cache.set(this.uniqueId(event), success);
     }
 
     this._currentBlockNumber = blockNumber;
+  }
+
+  private uniqueId(event: EventWrapper) {
+    return `${event.event.transactionHash}-${event.event.index}`;
   }
 
   private getRpcUrl() {
