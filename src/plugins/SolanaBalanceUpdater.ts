@@ -2,7 +2,7 @@ import { Plugin } from "../core/plugin/Plugin";
 import type { ProcessInput } from "../core/types/Protocol";
 import { logger } from "../util/monitoring";
 import config from "../config";
-import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
+import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import { ecdsaSign } from "secp256k1";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
@@ -179,7 +179,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     });
 
     try {
-      await client.sendTransaction(gtx.serialize(_gtx));
+      await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.ClusterAnchoring);
       logger.info(`Balance update forwarded successfully`);
       return ok({
         message: "Balance update forwarded successfully"

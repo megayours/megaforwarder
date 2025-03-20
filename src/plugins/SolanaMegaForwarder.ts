@@ -1,6 +1,6 @@
 import { Connection, type VersionedTransactionResponse } from "@solana/web3.js";
 import type { ProcessInput } from "../core/types/Protocol";
-import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
+import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import config from "../config";
 import { ecdsaSign } from "secp256k1";
 import { Plugin } from "../core/plugin/Plugin";
@@ -154,7 +154,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     })
 
     try {
-      await client.sendTransaction(gtx.serialize(_gtx));
+      await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.ClusterAnchoring);
       logger.info(`Executed successfully`);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)

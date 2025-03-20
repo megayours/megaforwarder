@@ -1,7 +1,7 @@
 import type { Log } from "ethers";
 import { Plugin } from "../core/plugin/Plugin";
 import type { EventLog } from "ethers";
-import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
+import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import type { ProcessInput } from "../core/types/Protocol";
 import { logger } from "../util/monitoring";
 import { JsonRpcProvider } from "ethers/providers";
@@ -195,7 +195,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     })
 
     try {
-      await client.sendTransaction(gtx.serialize(_gtx));
+      await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.ClusterAnchoring);
       logger.info(`Executed successfully`);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
