@@ -92,8 +92,6 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       return err({ type: "prepare_error", context: `Log does not match expected event` });
     }
 
-    logger.info(`Verified event from transaction ${transactionHash} at block ${blockNumber}`);
-
     const from = this.safelyExtractAddress(matchingLog.topics[1]);
     const to = this.safelyExtractAddress(matchingLog.topics[2]);
 
@@ -117,7 +115,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
         throw new Error('tokenURI function not found on contract');
       });
       const preparedTokenUri = this.routeViaGateway(tokenUri!);
-      logger.info(`Prepared token URI: ${preparedTokenUri}`);
+      logger.debug(`Prepared token URI: ${preparedTokenUri}`);
       const response = await fetch(preparedTokenUri);
       const json = await response.json();
       metadata = JSON.stringify(json);

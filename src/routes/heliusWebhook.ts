@@ -32,7 +32,6 @@ type TransferData = {
 const heliusWebhook = async (req: Request) => {
   const transferData = await req.json() as TransferData[];
 
-  logger.info(`Received Helius webhook`, { transferData });
   const header = req.headers;
   const authToken = header.get("Authorization");
 

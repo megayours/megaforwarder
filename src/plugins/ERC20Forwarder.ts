@@ -92,8 +92,6 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
       return err({ type: "prepare_error", context: `Log does not match expected event` });
     }
 
-    logger.info(`Verified event from transaction ${transactionHash} at block ${blockNumber}`);
-
     const from = this.safelyExtractAddress(matchingLog.topics[1]);
     const to = this.safelyExtractAddress(matchingLog.topics[2]);
 
@@ -222,7 +220,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     const rpcUrl = rpcs?.[Math.floor(Math.random() * rpcs.length)];
     if (!rpcUrl) throw new Error(`No RPC URL found for chain ${chain}`);
 
-    logger.info(`Selected RPC URL: ${rpcUrl}`);
+    logger.debug(`Selected RPC URL: ${rpcUrl}`);
     return rpcUrl;
   }
 

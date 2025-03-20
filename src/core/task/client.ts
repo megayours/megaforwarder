@@ -10,8 +10,6 @@ import { logger } from "../../util/monitoring";
 export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Result<ProtocolPrepareResult<R>, TaskError>> => {
   const reqBody = encode(request);
 
-  logger.info(`Requesting prepare from peer ${peer.oracleId} for data: `, request);
-
   return await ResultAsync.fromPromise(
     fetch(`http://${peer.address}/task/prepare`, {
       method: "POST",
@@ -55,8 +53,6 @@ export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Resu
 
 export const requestValidate = async (peer: Peer, request: ValidateRequest): Promise<Result<unknown, TaskError>> => {
   const reqBody = encode(request);
-
-  logger.info(`Requesting validate from peer ${peer.oracleId} for data: `, request);
 
   return await ResultAsync.fromPromise(
     fetch(`http://${peer.address}/task/validate`, {

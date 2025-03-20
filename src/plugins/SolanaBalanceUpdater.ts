@@ -54,7 +54,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     const mintPubkey = new PublicKey(input.tokenMint);
     const userPubkey = new PublicKey(input.userAccount);
 
-    logger.info(`Looking up token account for mint ${mintPubkey.toString()} and user ${userPubkey.toString()}`);
+    logger.debug(`Looking up token account for mint ${mintPubkey.toString()} and user ${userPubkey.toString()}`);
 
     // Get the associated token address for this user and token mint
     const tokenAddress = await this._throttler.execute(() =>
@@ -72,7 +72,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
       return err({ type: "permanent_error", context: `Error getting associated token address: ${tokenAddress.error}` });
     }
 
-    logger.info(`Looking up token balance for address ${tokenAddress.value.toString()}`);
+    logger.debug(`Looking up token balance for address ${tokenAddress.value.toString()}`);
 
     // Get the token account info to fetch balance
     let balance = "0";
@@ -95,7 +95,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
         if (accountInfo && accountInfo.account.data.parsed.info) {
           const parsedInfo = accountInfo.account.data.parsed.info;
           balance = parsedInfo.tokenAmount.amount;
-          logger.info(`Retrieved token balance from parsed account: ${balance} at address ${accountInfo.pubkey.toString()}`);
+          logger.debug(`Retrieved token balance from parsed account: ${balance} at address ${accountInfo.pubkey.toString()}`);
         } else {
           logger.info(`Retrieved account info structure is invalid`);
         }
@@ -119,7 +119,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
 
         if (tokenAccountResult.isOk()) {
           balance = tokenAccountResult.value.amount.toString();
-          logger.info(`Retrieved token balance from getAccount: ${balance}`);
+          logger.debug(`Retrieved token balance from getAccount: ${balance}`);
         } else if (tokenAccountResult.error.type !== "non_error") {
           logger.warn(`Failed to get token balance via both methods: ${JSON.stringify(tokenAccountResult.error)}`);
         }
@@ -130,7 +130,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
       logger.error(`Error in token account lookup: ${JSON.stringify(error)}`);
     }
 
-    logger.info(`Final retrieved token balance: ${balance}`);
+    logger.debug(`Final retrieved token balance: ${balance}`);
 
     // For a balance update, pass the token mint, user account, and current balance to the Chromia blockchain
     return ok({

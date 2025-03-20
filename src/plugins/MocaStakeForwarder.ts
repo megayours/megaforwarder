@@ -90,8 +90,6 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
       return err({ type: "prepare_error", context: `Log does not match expected event` });
     }
 
-    logger.info(`Verified event from transaction ${transactionHash} at block ${blockNumber}`);
-
     if (input.eventName === "Staked") {
       return this.handleStaked(input);
     } else if (input.eventName === "StakedBehalf") {

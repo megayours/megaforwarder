@@ -71,7 +71,7 @@ export class EVMListener extends Listener {
     const currentBlockNumber = await this._throttler.execute(() => provider.getBlockNumber());
 
     const blockNumber = Math.min(startBlock + this._blockHeightIncrement, currentBlockNumber);
-    logger.info(`Fetching events from block ${startBlock} to ${blockNumber}`);
+    logger.info(`Fetching events from block ${startBlock} to ${blockNumber}`, this._contractInfo.contract);
 
     const events: EventWrapper[] = [];
     for (const filter of this._contractInfo.filters) {
@@ -85,13 +85,13 @@ export class EVMListener extends Listener {
     for (const event of this.sortEvents(events)) {
       const cachedSuccess = await this._cache.get(this.uniqueId(event));
       if (cachedSuccess) {
-        logger.info(`Skipping event ${this.uniqueId(event)} because it was already processed`);
+        logger.info(`Skipping event ${this.uniqueId(event)} because it was already processed`, this._contractInfo.contract);
         continue;
       }
 
       const success = await this.handleEvent(event);
       if (success.isErr() || !success.value) {
-        logger.error(`Failed to handle event: ${event.event.transactionHash}`);
+        logger.error(`Failed to handle event: ${event.event.transactionHash}`, this._contractInfo.contract);
         return;
       }
 
@@ -112,7 +112,7 @@ export class EVMListener extends Listener {
     const rpcUrl = rpcs?.[Math.floor(Math.random() * rpcs.length)];
     if (!rpcUrl) throw new Error(`No RPC URL found for chain ${this._contractInfo.chain}`);
 
-    logger.info(`Selected RPC URL: ${rpcUrl}`);
+    logger.debug(`Selected RPC URL: ${rpcUrl}`);
     return rpcUrl;
   }
 
@@ -135,7 +135,7 @@ export class EVMListener extends Listener {
         contract: hexToBuffer(this._contractInfo.contract)
       });
 
-    logger.info(`Starting from indexed block ${blockNumber}`);
+    logger.info(`Starting from indexed block ${blockNumber}`, this._contractInfo.contract);
     return blockNumber ?? -1;
   }
 
@@ -155,7 +155,6 @@ export class EVMListener extends Listener {
         collection: this._contractInfo.collection!,
         event: event.event
       }
-      logger.info(`Handling ERC721 event`, event.event);
       const task = new Task(ERC721Forwarder.pluginId, input);
       const result = await task.start();
       if (result.isErr()) {
