@@ -114,7 +114,7 @@ export class Task<T> {
       .map((peer) => config.peers.find((p) => p.publicKey === peer))
       .filter((peer) => peer !== undefined);
 
-    let data = primaryValidateResult.value;
+    let data: unknown = primaryValidateResult.value;
     for (const peer of validationPeers) {
       const preparedData = prepareResults.find((result) => result.publicKey === peer.publicKey)?.result.data;
       if (!preparedData) return err({ type: "plugin_error", context: "No prepared data received from peer" });
@@ -122,7 +122,7 @@ export class Task<T> {
       if (!signature) return err({ type: "plugin_error", context: "No signature received from peer" });
 
       logger.info(`Validating data from peer ${peer.publicKey}`, data);
-      const validationResult = await requestValidate<unknown, T>(peer, {
+      const validationResult = await requestValidate(peer, {
         pluginId: this.plugin.metadata.id,
         input: data,
         preparedData,

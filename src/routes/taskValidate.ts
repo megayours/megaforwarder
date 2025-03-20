@@ -4,9 +4,12 @@ import { encode } from "../util/encoder";
 import { decodeRequest } from "../util/http";
 import { verifySignature } from "../util/crypto";
 import config from "../config";
+import { logger } from "../util/monitoring";
 
 const taskValidate = async (req: Request) => {
   const body = await decodeRequest(req) as ValidateRequest;
+
+  logger.info(`Validating data from peer`, body);
 
   if (!verifySignature(encode(body.preparedData), body.signature, config.publicKey)) {
     return new Response(JSON.stringify({ error: "Invalid signature" }), {

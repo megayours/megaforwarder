@@ -1,8 +1,8 @@
 import { Plugin } from "../core/plugin/Plugin";
-import type { PrepareResult, ProcessInput, ProcessResult, ValidateResult, ExecuteResult } from "../core/types/Protocol";
+import type { ProcessInput } from "../core/types/Protocol";
 import { logger } from "../util/monitoring";
 import config from "../config";
-import { createClient, getDigestToSignFromRawGtxBody, gtx, ResponseStatus, type GTX, type RawGtxBody } from "postchain-client";
+import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import { ecdsaSign } from "secp256k1";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";

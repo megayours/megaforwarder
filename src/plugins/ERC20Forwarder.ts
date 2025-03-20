@@ -1,8 +1,8 @@
-import type { InterfaceAbi, Log } from "ethers";
+import type { Log } from "ethers";
 import { Plugin } from "../core/plugin/Plugin";
 import type { EventLog } from "ethers";
-import { createClient, CustomError, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
-import type { ExecuteResult, PrepareResult, ProcessInput, ProcessResult, ValidateResult } from "../core/types/Protocol";
+import { createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
+import type { ProcessInput } from "../core/types/Protocol";
 import { logger } from "../util/monitoring";
 import { JsonRpcProvider } from "ethers/providers";
 import { dataSlice, ethers } from "ethers";

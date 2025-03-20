@@ -1,13 +1,16 @@
 import type { Peer } from "../types/config/Peer";
 import type { ValidateRequest, ValidateResponse } from "../types/requests/ValidateRequest";
 import { decode, encode } from "../../util/encoder";
-import type { ProtocolPrepareResult, ValidateResult } from "../types/Protocol";
+import type { ProtocolPrepareResult } from "../types/Protocol";
 import type { PrepareResponse } from "../types/requests/PrepareRequest";
 import { err, ok, Result, ResultAsync } from "neverthrow";
 import type { TaskError } from "../../util/errors";
+import { logger } from "../../util/monitoring";
 
 export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Result<ProtocolPrepareResult<R>, TaskError>> => {
   const reqBody = encode(request);
+
+  logger.info(`Requesting prepare from peer ${peer.oracleId} for data: `, request);
 
   return await ResultAsync.fromPromise(
     fetch(`http://${peer.address}/task/prepare`, {
@@ -50,8 +53,10 @@ export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Resu
   });
 };
 
-export const requestValidate = async <T, R>(peer: Peer, request: ValidateRequest): Promise<Result<ValidateResult<R>, TaskError>> => {
+export const requestValidate = async (peer: Peer, request: ValidateRequest): Promise<Result<unknown, TaskError>> => {
   const reqBody = encode(request);
+
+  logger.info(`Requesting validate from peer ${peer.oracleId} for data: `, request);
 
   return await ResultAsync.fromPromise(
     fetch(`http://${peer.address}/task/validate`, {
@@ -74,8 +79,9 @@ export const requestValidate = async <T, R>(peer: Peer, request: ValidateRequest
       })
     );
   }).andThen((resBody: ValidateResponse) => {
-    return ok<ValidateResult<R>, TaskError>({
-      data: resBody.encodedData ? decode(Buffer.from(resBody.encodedData, 'hex')) as R : undefined,
+    return resBody.encodedData ? ok<unknown, TaskError>(decode(Buffer.from(resBody.encodedData, 'hex'))) : err<unknown, TaskError>({
+      type: 'plugin_error',
+      context: `Failed to validate task in peer ${peer.oracleId}`
     });
   });
 };

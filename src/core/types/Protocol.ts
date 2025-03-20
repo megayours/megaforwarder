@@ -22,10 +22,6 @@ export type ProcessResult<T> = {
   data?: T;
 };
 
-export type ValidateResult<T> = {
-  data?: T;
-};
-
 export type ExecuteResult<T> = {
   data?: T;
 };
