@@ -233,7 +233,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     })
 
     try {
-      await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.Dapp);
+      await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.ClusterAnchoring);
       logger.info(`Executed successfully`);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
