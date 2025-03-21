@@ -214,14 +214,13 @@ export class EVMListener extends Listener {
     }
   }
 
-  private async logMetadata() {
+  private logMetadata() {
     return {
       listener: this.id,
       contract: this._contractInfo.contract,
       chain: this._contractInfo.chain,
       type: this._contractInfo.type,
       collection: this._contractInfo.collection,
-      
     }
   }
 }
