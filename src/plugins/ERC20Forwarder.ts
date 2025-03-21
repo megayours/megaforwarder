@@ -14,7 +14,6 @@ import { Throttler } from "../util/throttle";
 import erc20Abi from "../util/abis/erc20";
 import type { OracleError } from "../util/errors";
 import { err, ok, Result, ResultAsync } from "neverthrow";
-import { MERKLE_HASH_VERSION } from "../util/constants";
 
 export type ERC20ForwarderInput = {
   chain: string;
@@ -61,30 +60,40 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
 
     // Check that transaction exists
     const transaction = await throttler.execute(() =>
-      provider.getTransaction(transactionHash)
+      ResultAsync.fromPromise(provider.getTransaction(transactionHash), (error) => error)
     );
-    if (!transaction) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
+    if (transaction.isErr()) {
+      return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
+    }
 
     // Verify transaction was included in a block
-    if (!transaction.blockNumber) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
+    if (transaction.value?.blockNumber === null) {
+      return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
+    }
 
     // Get transaction receipt to access logs
     const receipt = await throttler.execute(() =>
-      provider.getTransactionReceipt(transactionHash)
+      ResultAsync.fromPromise(provider.getTransactionReceipt(transactionHash), (error) => error)
     );
-    if (!receipt) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
+    if (receipt.isErr()) {
+      return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
+    }
 
     // Verify that the transaction was successful
-    if (receipt.status !== 1) return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
+    if (receipt.value?.status !== 1) {
+      return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
+    }
 
     // Find the matching log in the receipt
-    const matchingLog = receipt.logs.find(log =>
+    const matchingLog = receipt.value?.logs.find(log =>
       log.blockNumber === blockNumber &&
       log.index === logIndex &&
       log.address.toLowerCase() === contractAddress.toLowerCase()
     );
 
-    if (!matchingLog) return err({ type: "prepare_error", context: `Log not found in transaction ${transactionHash} at block ${blockNumber}` });
+    if (!matchingLog) {
+      return err({ type: "prepare_error", context: `Log not found in transaction ${transactionHash} at block ${blockNumber}` });
+    }
 
     // Additional verification: check that the topics/data match
     if (input.event.topics.length !== matchingLog.topics.length ||
@@ -104,10 +113,14 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     if (isMint) {
       const contract = new ethers.Contract(contractAddress, erc20Abi, provider);
       const [decimals, name, symbol] = await Promise.all([
-        contract.decimals!(),
-        contract.name!(),
-        contract.symbol!()
+        throttler.execute(() => ResultAsync.fromPromise(contract.decimals!(), (error) => error)),
+        throttler.execute(() => ResultAsync.fromPromise(contract.name!(), (error) => error)),
+        throttler.execute(() => ResultAsync.fromPromise(contract.symbol!(), (error) => error))
       ]);
+
+      if (decimals.isErr()) return err({ type: "prepare_error", context: `Failed to get decimals` });
+      if (name.isErr()) return err({ type: "prepare_error", context: `Failed to get name` });
+      if (symbol.isErr()) return err({ type: "prepare_error", context: `Failed to get symbol` });
 
       return ok({
         chain: input.chain,
@@ -119,9 +132,9 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
         to,
         amount,
         isMint: true,
-        decimals: Number(decimals),
-        name,
-        symbol
+        decimals: Number(decimals.value),
+        name: name.value,
+        symbol: symbol.value
       });
     } else {
       return ok({

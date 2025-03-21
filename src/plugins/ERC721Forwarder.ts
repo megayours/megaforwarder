@@ -109,13 +109,19 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       const contract = new Contract(contractAddress, erc721Abi, provider);
       if (!contract.tokenURI) return err({ type: "prepare_error", context: `Token URI not found on contract` });
 
-      tokenUri = await throttler.execute(() => {
+      const tokenUriResult = await throttler.execute(() => {
         // Ensure tokenURI exists before calling it
         if (typeof contract.tokenURI === 'function') {
-          return contract.tokenURI(tokenId);
+          return ResultAsync.fromPromise(contract.tokenURI(tokenId), (error) => error);
         }
-        throw new Error('tokenURI function not found on contract');
+        return err({ type: "prepare_error", context: `Token URI not found on contract` });
       });
+
+      if (tokenUriResult.isErr()) {
+        return err({ type: "prepare_error", context: `Failed to get token URI` });
+      }
+
+      tokenUri = tokenUriResult.value;
       const preparedTokenUri = this.routeViaGateway(tokenUri!);
       logger.debug(`Prepared token URI: ${preparedTokenUri}`);
       const metadataTimestamp = Date.now();
