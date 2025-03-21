@@ -179,7 +179,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     });
 
     try {
-      await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.ClusterAnchoring);
+      await client.sendTransaction(gtx.serialize(_gtx));
       logger.info(`Balance update forwarded successfully`);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)

@@ -154,7 +154,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     })
 
     try {
-      await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.ClusterAnchoring);
+      await client.sendTransaction(gtx.serialize(_gtx));
       logger.info(`Executed successfully`);
     } catch (error: any) {
       if (error.status === 409) {
