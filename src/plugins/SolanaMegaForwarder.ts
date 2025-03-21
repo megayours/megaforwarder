@@ -7,6 +7,7 @@ import { Plugin } from "../core/plugin/Plugin";
 import { logger } from "../util/monitoring";
 import { err, ok, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
+import { MERKLE_HASH_VERSION } from "../util/constants";
 
 type SolanaMegaForwarderInput = {
   txSignature: string;
@@ -134,7 +135,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
 
   async validate(gtx: GTX, preparedData: Event): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
-    const digest = getDigestToSignFromRawGtxBody(gtxBody, 1);
+    const digest = getDigestToSignFromRawGtxBody(gtxBody, MERKLE_HASH_VERSION);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
 
     if (gtx.signatures) {

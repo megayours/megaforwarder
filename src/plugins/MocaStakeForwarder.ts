@@ -15,6 +15,7 @@ import type { TransactionResponse } from "ethers";
 import { Throttler } from "../util/throttle";
 import { err, ok, Result, ResultAsync } from "neverthrow";
 import type { OracleError } from "../util/errors";
+import { MERKLE_HASH_VERSION } from "../util/constants";
 
 export type MocaStakeForwarderInput = {
   chain: string;
@@ -236,7 +237,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
 
   async validate(gtx: GTX, preparedData: StakingEvent[]): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
-    const digest = getDigestToSignFromRawGtxBody(gtxBody, 1);
+    const digest = getDigestToSignFromRawGtxBody(gtxBody, MERKLE_HASH_VERSION);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
 
     if (gtx.signatures) {

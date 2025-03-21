@@ -9,6 +9,7 @@ import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
 import { Throttler } from "../util/throttle";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
+import { MERKLE_HASH_VERSION } from "../util/constants";
 
 type SolanaBalanceUpdaterInput = {
   tokenMint: string;
@@ -159,7 +160,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
 
   async validate(gtx: GTX, preparedData: BalanceUpdateEvent): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
-    const digest = getDigestToSignFromRawGtxBody(gtxBody, 1);
+    const digest = getDigestToSignFromRawGtxBody(gtxBody, MERKLE_HASH_VERSION);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
 
     if (gtx.signatures) {

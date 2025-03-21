@@ -14,6 +14,7 @@ import { Throttler } from "../util/throttle";
 import erc20Abi from "../util/abis/erc20";
 import type { OracleError } from "../util/errors";
 import { err, ok, Result, ResultAsync } from "neverthrow";
+import { MERKLE_HASH_VERSION } from "../util/constants";
 
 export type ERC20ForwarderInput = {
   chain: string;
@@ -197,7 +198,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
 
   async validate(gtx: GTX, preparedData: ERC20Event): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
-    const digest = getDigestToSignFromRawGtxBody(gtxBody, 1);
+    const digest = getDigestToSignFromRawGtxBody(gtxBody, MERKLE_HASH_VERSION);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
 
     if (gtx.signatures) {

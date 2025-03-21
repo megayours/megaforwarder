@@ -214,7 +214,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
 
   async validate(gtx: GTX, preparedData: ERC721Event): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
-    const digest = getDigestToSignFromRawGtxBody(gtxBody, 1);
+    const digest = getDigestToSignFromRawGtxBody(gtxBody, MERKLE_HASH_VERSION);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
 
     if (gtx.signatures) {

@@ -1,0 +1,1 @@
+export const MERKLE_HASH_VERSION = 0;
