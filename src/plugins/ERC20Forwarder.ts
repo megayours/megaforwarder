@@ -13,7 +13,7 @@ import { hexToBuffer } from "../util/hex";
 import { Throttler } from "../util/throttle";
 import erc20Abi from "../util/abis/erc20";
 import type { PluginError } from "../util/errors";
-import { err, ok, Result } from "neverthrow";
+import { err, ok, Result, ResultAsync } from "neverthrow";
 
 export type ERC20ForwarderInput = {
   chain: string;
@@ -143,6 +143,24 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     if (!selectedInput) return err({ type: "process_error", context: `No input data received` });
 
     const eventId = `${selectedInput.data.transactionHash}-${selectedInput.data.logIndex}`;
+
+    const client = await createClient({
+      directoryNodeUrlPool: this._directoryNodeUrlPool,
+      blockchainRid: this._blockchainRid.toString('hex')
+    })
+
+    const alreadyProcessed = await ResultAsync.fromPromise(client.query('evm.is_event_processed', {
+      contract: Buffer.from(selectedInput.data.contractAddress.replace('0x', ''), 'hex'),
+      event_id: eventId
+    }), (error) => error);
+
+    if (alreadyProcessed.isErr()) {
+      return err({ type: "process_error", context: `Failed to check if event is already processed` });
+    }
+
+    if (alreadyProcessed.value) {
+      return err({ type: "non_error", context: `Event already processed` });
+    }
 
     let tx: GTX;
     if (selectedInput.data.isMint) {

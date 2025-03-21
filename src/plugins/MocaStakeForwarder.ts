@@ -13,7 +13,7 @@ import { hexToBuffer } from "../util/hex";
 import { Interface } from "ethers";
 import type { TransactionResponse } from "ethers";
 import { Throttler } from "../util/throttle";
-import { err, ok, Result } from "neverthrow";
+import { err, ok, Result, ResultAsync } from "neverthrow";
 import type { PluginError } from "../util/errors";
 
 export type MocaStakeForwarderInput = {
@@ -178,10 +178,29 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     const selectedInput = input[Math.floor(Math.random() * input.length)];
     if (!selectedInput) return err({ type: "process_error", context: `No input data` });
 
+    const client = await createClient({
+      directoryNodeUrlPool: this._directoryNodeUrlPool,
+      blockchainRid: this._blockchainRid.toString('hex')
+    })
+
     let tx: GTX = emptyGtx;
     let i = 0;
     for (const event of selectedInput.data) {
       const eventId = `${event.transactionHash}-${event.logIndex}-${i++}`;
+
+      const alreadyProcessed = await ResultAsync.fromPromise(client.query('evm.is_event_processed', {
+        contract: Buffer.from(event.contractAddress.replace('0x', ''), 'hex'),
+        event_id: eventId
+      }), (error) => error);
+      
+      if (alreadyProcessed.isErr()) {
+        return err({ type: "process_error", context: `Failed to check if event is already processed` });
+      }
+
+      if (alreadyProcessed.value) {
+        continue
+      }
+
       if (event.type === "staked" || event.type === "staked_behalf") {
         tx = gtx.addTransactionToGtx('evm.erc20.mint', [
           event.chain,
@@ -204,6 +223,10 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
           event.amount
         ], tx);
       }
+    }
+
+    if (tx.operations.length === 0) {
+      return err({ type: "non_error", context: `No transactions to execute` });
     }
 
     tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
