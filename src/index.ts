@@ -27,7 +27,7 @@ pluginRegistry.register(new SolanaBalanceUpdater());
 
 if (config.primary) {
   const listenerHandler = ListenerRegistry.getInstance();
-  listenerHandler.register(new SolanaListener());
+  // listenerHandler.register(new SolanaListener());
   listenerHandler.register(new EVMListener({
     chain: "ethereum",
     contract: "0xBd3531dA5CF5857e7CfAA92426877b022e612cf8",
