@@ -13,7 +13,7 @@ import { MocaStakeForwarder, type MocaStakeForwarderInput } from "../plugins/Moc
 import { Throttler } from "../util/throttle";
 import config from "../config";
 import type { ListenerError } from "../util/errors";
-import { err, ok, Result } from "neverthrow";
+import { err, ok, Result, ResultAsync } from "neverthrow";
 import { createCache, type Cache } from "cache-manager";
 import { secondsFromNow } from "../util/time";
 
@@ -69,30 +69,42 @@ export class EVMListener extends Listener {
 
     let startBlock = this._currentBlockNumber;
 
-    const currentBlockNumber = await this._throttler.execute(() => provider.getBlockNumber());
+    const currentBlockNumber = await this._throttler
+      .execute(() => ResultAsync.fromPromise(provider.getBlockNumber(), (error) => error));
 
-    const blockNumber = Math.min(startBlock + this._blockHeightIncrement, currentBlockNumber);
-    logger.info(`Fetching events from block ${startBlock} to ${blockNumber}`, { contract: this._contractInfo.contract });
+    if (currentBlockNumber.isErr()) {
+      logger.error(`Failed to get current block number`, this.logMetadata());
+      return secondsFromNow(15);
+    }
+
+    const blockNumber = Math.min(startBlock + this._blockHeightIncrement, currentBlockNumber.value);
+    logger.info(`Fetching events from block ${startBlock} to ${blockNumber}`, this.logMetadata());
 
     const events: EventWrapper[] = [];
     for (const filter of this._contractInfo.filters) {
       const contractFilter = filter.filter(contract);
       const foundEvents = await this._throttler.execute(() => 
-        contract.queryFilter(contractFilter, startBlock, blockNumber)
+        ResultAsync.fromPromise(contract.queryFilter(contractFilter, startBlock, blockNumber), (error) => error)
       );
-      events.push(...foundEvents.map(event => ({ name: filter.name, event })));
+
+      if (foundEvents.isErr()) {
+        logger.error(`Failed to get events`, this.logMetadata());
+        return secondsFromNow(15);
+      }
+
+      events.push(...foundEvents.value.map(event => ({ name: filter.name, event })));
     }
 
     for (const event of this.sortEvents(events)) {
       const cachedSuccess = await this._cache.get(this.uniqueId(event));
       if (cachedSuccess) {
-        logger.info(`Skipping event ${this.uniqueId(event)} because it was already processed`, { contract: this._contractInfo.contract });
+        logger.info(`Skipping event ${this.uniqueId(event)} because it was already processed`, this.logMetadata());
         continue;
       }
 
       const success = await this.handleEvent(event);
       if (success.isErr() || !success.value) {
-        logger.error(`Failed to handle event: ${event.event.transactionHash}`, { contract: this._contractInfo.contract });
+        logger.error(`Failed to handle event: ${event.event.transactionHash}`, this.logMetadata());
         return secondsFromNow(15);
       }
 
@@ -100,7 +112,7 @@ export class EVMListener extends Listener {
     }
 
     this._currentBlockNumber = blockNumber;
-    logger.info(`Processed to block ${blockNumber}`, { contract: this._contractInfo.contract });
+    logger.info(`Processed to block ${blockNumber}`, this.logMetadata());
     return secondsFromNow(1);
   }
 
@@ -138,7 +150,7 @@ export class EVMListener extends Listener {
         contract: hexToBuffer(this._contractInfo.contract)
       });
 
-    logger.info(`Found indexed block ${blockNumber}`, { contract: this._contractInfo.contract });
+    logger.info(`Found indexed block ${blockNumber}`, this.logMetadata());
     return blockNumber ?? -1;
   }
 
@@ -194,11 +206,22 @@ export class EVMListener extends Listener {
     } 
     
     else {
-      logger.error(`Unsupported contract type: ${this._contractInfo.type}`, { contract: this._contractInfo.contract });
+      logger.error(`Unsupported contract type: ${this._contractInfo.type}`, this.logMetadata());
       return err({ 
         type: "unsupported_contract_type",
         context: `Unsupported contract type: ${this._contractInfo.type}` 
       });
+    }
+  }
+
+  private async logMetadata() {
+    return {
+      listener: this.id,
+      contract: this._contractInfo.contract,
+      chain: this._contractInfo.chain,
+      type: this._contractInfo.type,
+      collection: this._contractInfo.collection,
+      
     }
   }
 }
