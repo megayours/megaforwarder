@@ -117,7 +117,7 @@ export class EVMListener extends Listener {
 
     this._currentBlockNumber = blockNumber;
     logger.info(`Processed to block ${blockNumber}`, this.logMetadata());
-    return secondsFromNow(1);
+    return secondsFromNow(2);
   }
 
   private uniqueId(event: EventWrapper) {
