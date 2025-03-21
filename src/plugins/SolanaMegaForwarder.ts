@@ -134,7 +134,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
 
   async validate(gtx: GTX, preparedData: Event): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
-    const digest = getDigestToSignFromRawGtxBody(gtxBody);
+    const digest = getDigestToSignFromRawGtxBody(gtxBody, 1);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
 
     if (gtx.signatures) {
@@ -154,7 +154,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     })
 
     try {
-      await client.sendTransaction(gtx.serialize(_gtx));
+      await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.Dapp);
       logger.info(`Executed successfully`);
     } catch (error: any) {
       if (error.status === 409) {
