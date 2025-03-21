@@ -135,7 +135,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
 
   async validate(gtx: GTX, preparedData: Event): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
-    const digest = getDigestToSignFromRawGtxBody(gtxBody, MERKLE_HASH_VERSION);
+    const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
 
     if (gtx.signatures) {

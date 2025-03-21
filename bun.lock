@@ -12,7 +12,7 @@
         "cache-manager": "^6.4.1",
         "ethers": "^6.13.5",
         "neverthrow": "^8.2.0",
-        "postchain-client": "^1.21.1",
+        "postchain-client": "1.21.0",
         "prom-client": "^15.1.3",
         "secp256k1": "^5.0.1",
         "winston": "^3.17.0",
@@ -330,7 +330,7 @@
 
     "pbkdf2": ["pbkdf2@3.1.2", "", { "dependencies": { "create-hash": "^1.1.2", "create-hmac": "^1.1.4", "ripemd160": "^2.0.1", "safe-buffer": "^5.0.1", "sha.js": "^2.4.8" } }, "sha512-iuh7L6jA7JEGu2WxDwtQP1ddOpaJNC4KlDEFfdQajSGgGPNi4OyDc2R7QnbY2bR9QjBVGwgvTdNJZoE7RaxUMA=="],
 
-    "postchain-client": ["postchain-client@1.21.1", "", { "dependencies": { "@chromia/asn1": "^1.0.1", "@types/bn.js": "^5.1.1", "crypto-browserify": "^3.12.0", "lodash": "^4.17.21", "secp256k1": "^4.0.4", "stream-browserify": "^3.0.0", "zod": "^3.22.4" }, "peerDependencies": { "buffer": "^5.x || ^6.x", "events": "^3.3.0" } }, "sha512-5nVvPir8ctoiU17sIDk0tJQDcQSqFIkbRb6fmC/yBrMAn5JX5zzBLqY0duEmwSdPZTiWC+FhHXsL/MkCtyBqkQ=="],
+    "postchain-client": ["postchain-client@1.21.0", "", { "dependencies": { "@chromia/asn1": "^1.0.1", "@types/bn.js": "^5.1.1", "crypto-browserify": "^3.12.0", "lodash": "^4.17.21", "secp256k1": "^4.0.4", "stream-browserify": "^3.0.0", "zod": "^3.22.4" }, "peerDependencies": { "buffer": "^5.x || ^6.x", "events": "^3.3.0" } }, "sha512-/CdUEG3Fw6+sL9QEubXkBOlqLfOVYHcWe0mAolZcQm7lqFm+Lp8t0sIe072FIwGHoe8BFddr/bBAl2lsnXWn7A=="],
 
     "process-nextick-args": ["process-nextick-args@2.0.1", "", {}, "sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag=="],
 
