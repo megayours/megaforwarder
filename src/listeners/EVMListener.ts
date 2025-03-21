@@ -89,7 +89,7 @@ export class EVMListener extends Listener {
 
       if (foundEvents.isErr()) {
         logger.error(`Failed to get events`, this.logMetadata());
-        return secondsFromNow(15);
+        return secondsFromNow(30);
       }
 
       events.push(...foundEvents.value.map(event => ({ name: filter.name, event })));
@@ -109,7 +109,7 @@ export class EVMListener extends Listener {
           continue;
         }
         logger.error(`Failed to handle event: ${event.event.transactionHash}, error: ${JSON.stringify(result)}`, this.logMetadata());
-        return secondsFromNow(15);
+        return secondsFromNow(30);
       }
 
       this._cache.set(this.uniqueId(event), result);
@@ -117,7 +117,7 @@ export class EVMListener extends Listener {
 
     this._currentBlockNumber = blockNumber;
     logger.info(`Processed to block ${blockNumber}`, this.logMetadata());
-    return secondsFromNow(2);
+    return secondsFromNow(10);
   }
 
   private uniqueId(event: EventWrapper) {
