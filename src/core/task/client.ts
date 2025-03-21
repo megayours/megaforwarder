@@ -4,10 +4,9 @@ import { decode, encode } from "../../util/encoder";
 import type { ProtocolPrepareResult } from "../types/Protocol";
 import type { PrepareResponse } from "../types/requests/PrepareRequest";
 import { err, ok, Result, ResultAsync } from "neverthrow";
-import type { TaskError } from "../../util/errors";
-import { logger } from "../../util/monitoring";
+import type { OracleError } from "../../util/errors";
 
-export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Result<ProtocolPrepareResult<R>, TaskError>> => {
+export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Result<ProtocolPrepareResult<R>, OracleError>> => {
   const reqBody = encode(request);
 
   return await ResultAsync.fromPromise(
@@ -18,21 +17,21 @@ export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Resu
         "Content-Type": "application/json",
       },
     }),
-    (error): TaskError => ({
+    (error): OracleError => ({
       type: 'timeout',
       context: `Failed to connect to peer ${peer.oracleId}: ${error}`
     })
   ).andThen((response) => {
     return ResultAsync.fromPromise(
       response.json() as Promise<PrepareResponse>,
-      (error): TaskError => ({
+      (error): OracleError => ({
         type: 'plugin_error',
         context: `Failed to parse response from peer ${peer.oracleId}: ${error}`
       })
     );
   }).andThen((resBody: PrepareResponse) => {
     if (!resBody.encodedData) {
-      return err<ProtocolPrepareResult<R>, TaskError>({
+      return err<ProtocolPrepareResult<R>, OracleError>({
         type: 'plugin_error',
         context: `Failed to prepare task in peer ${peer.oracleId}`
       });
@@ -40,7 +39,7 @@ export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Resu
 
     const data = decode(Buffer.from(resBody.encodedData, 'hex')) as R;
 
-    return ok<ProtocolPrepareResult<R>, TaskError>({
+    return ok<ProtocolPrepareResult<R>, OracleError>({
       data,
       signatureData: {
         signature: resBody.signature,
@@ -51,7 +50,7 @@ export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Resu
   });
 };
 
-export const requestValidate = async (peer: Peer, request: ValidateRequest): Promise<Result<unknown, TaskError>> => {
+export const requestValidate = async (peer: Peer, request: ValidateRequest): Promise<Result<unknown, OracleError>> => {
   const reqBody = encode(request);
 
   return await ResultAsync.fromPromise(
@@ -62,20 +61,20 @@ export const requestValidate = async (peer: Peer, request: ValidateRequest): Pro
         "Content-Type": "application/json",
       },
     }),
-    (error): TaskError => ({
+    (error): OracleError => ({
       type: 'timeout',
       context: `Failed to connect to peer ${peer.oracleId}: ${error}`
     })
   ).andThen((response) => {
     return ResultAsync.fromPromise(
       response.json() as Promise<ValidateResponse>,
-      (error): TaskError => ({
+      (error): OracleError => ({
         type: 'plugin_error',
         context: `Failed to parse response from peer ${peer.oracleId}: ${error}`
       })
     );
   }).andThen((resBody: ValidateResponse) => {
-    return resBody.encodedData ? ok<unknown, TaskError>(decode(Buffer.from(resBody.encodedData, 'hex'))) : err<unknown, TaskError>({
+    return resBody.encodedData ? ok<unknown, OracleError>(decode(Buffer.from(resBody.encodedData, 'hex'))) : err<unknown, OracleError>({
       type: 'plugin_error',
       context: `Failed to validate task in peer ${peer.oracleId}`
     });

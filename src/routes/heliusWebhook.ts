@@ -1,11 +1,9 @@
 import { Result } from "neverthrow";
 import config from "../config";
-import { PluginNotFound } from "../core/errors/PluginNotFound";
 import { Task } from "../core/task/Task";
-import type { TaskCreationRequest } from "../core/types/requests/TaskCreationRequest";
 import { SolanaBalanceUpdater } from "../plugins/SolanaBalanceUpdater";
 import { logger } from "../util/monitoring";
-import type { TaskError } from "../util/errors";
+import type { OracleError } from "../util/errors";
 
 type RawTokenAmount = {
   decimals: number;
@@ -55,7 +53,7 @@ const heliusWebhook = async (req: Request) => {
         userAccount: tokenTransfer.userAccount,
         decimals: tokenTransfer.rawTokenAmount.decimals
       }),
-      (error): TaskError => ({
+      (error): OracleError => ({
         type: 'plugin_error',
         context: `Failed to create task: ${error}`
       })

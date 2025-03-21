@@ -6,7 +6,7 @@ import { ecdsaSign } from "secp256k1";
 import { Plugin } from "../core/plugin/Plugin";
 import { logger } from "../util/monitoring";
 import { err, ok, type Result } from "neverthrow";
-import type { PluginError } from "../util/errors";
+import type { OracleError } from "../util/errors";
 
 type SolanaMegaForwarderInput = {
   txSignature: string;
@@ -43,7 +43,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     this._megaYoursBlockchainRid = Buffer.from(config.abstractionChain.blockchainRid, "hex");
   }
 
-  handleTokenRegistration(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): Result<Event, PluginError> {
+  handleTokenRegistration(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): Result<Event, OracleError> {
     const { address, properties } = data;
 
     logger.info(`New token Registration`, address);
@@ -60,7 +60,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     });
   }
 
-  handleTokenUpdate(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): Result<Event, PluginError> {
+  handleTokenUpdate(signature: string, transaction: VersionedTransactionResponse, data: TokenRegistration): Result<Event, OracleError> {
     const { address, properties } = data;
 
     logger.info(`New token Update`, address);
@@ -71,7 +71,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     });
   }
 
-  async prepare(input: SolanaMegaForwarderInput): Promise<Result<Event, PluginError>> {
+  async prepare(input: SolanaMegaForwarderInput): Promise<Result<Event, OracleError>> {
     const transaction = await this._connection.getTransaction(input.txSignature, {
       commitment: "confirmed",
       maxSupportedTransactionVersion: 0,
@@ -121,7 +121,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     }
   }
 
-  async process(input: ProcessInput<Event>[]): Promise<Result<GTX, PluginError>> {
+  async process(input: ProcessInput<Event>[]): Promise<Result<GTX, OracleError>> {
     const selectedData = input[0];
     if (!selectedData) return err({ type: "process_error", context: `No input data` });
     const { operation, args }: Event = selectedData.data;
@@ -132,7 +132,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: Event): Promise<Result<GTX, PluginError>> {
+  async validate(gtx: GTX, preparedData: Event): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -146,7 +146,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     return ok(gtx);
   }
 
-  async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
+  async execute(_gtx: GTX): Promise<Result<boolean, OracleError>> {
     logger.debug(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,

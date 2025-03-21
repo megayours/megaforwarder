@@ -13,7 +13,7 @@ import { hexToBuffer } from "../util/hex";
 import { Throttler } from "../util/throttle";
 import erc721Abi from "../util/abis/erc721";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
-import type { PluginError } from "../util/errors";
+import type { OracleError } from "../util/errors";
 
 export type ERC721ForwarderInput = {
   chain: string;
@@ -47,7 +47,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
   }
 
-  async prepare(input: ERC721ForwarderInput): Promise<Result<ERC721Event, PluginError>> {
+  async prepare(input: ERC721ForwarderInput): Promise<Result<ERC721Event, OracleError>> {
     const rpcUrl = this.getRpcUrl(input.chain);
     const provider = new JsonRpcProvider(rpcUrl);
     const throttler = Throttler.getInstance(input.chain);
@@ -136,7 +136,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     });
   }
 
-  async process(input: ProcessInput<ERC721Event>[]): Promise<Result<GTX, PluginError>> {
+  async process(input: ProcessInput<ERC721Event>[]): Promise<Result<GTX, OracleError>> {
     const emptyGtx = gtx.emptyGtx(this._blockchainRid);
     const selectedInput = input[Math.floor(Math.random() * input.length)];
     if (!selectedInput) return err({ type: "process_error", context: `No input data` });
@@ -201,7 +201,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: ERC721Event): Promise<Result<GTX, PluginError>> {
+  async validate(gtx: GTX, preparedData: ERC721Event): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -215,7 +215,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     return ok(gtx);
   }
 
-  async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
+  async execute(_gtx: GTX): Promise<Result<boolean, OracleError>> {
     logger.debug(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,

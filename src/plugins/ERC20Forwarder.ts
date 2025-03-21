@@ -12,7 +12,7 @@ import config from "../config";
 import { hexToBuffer } from "../util/hex";
 import { Throttler } from "../util/throttle";
 import erc20Abi from "../util/abis/erc20";
-import type { PluginError } from "../util/errors";
+import type { OracleError } from "../util/errors";
 import { err, ok, Result, ResultAsync } from "neverthrow";
 
 export type ERC20ForwarderInput = {
@@ -47,7 +47,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     this._blockchainRid = Buffer.from(config.abstractionChain.blockchainRid, 'hex');
   }
 
-  async prepare(input: ERC20ForwarderInput): Promise<Result<ERC20Event, PluginError>> {
+  async prepare(input: ERC20ForwarderInput): Promise<Result<ERC20Event, OracleError>> {
     const rpcUrl = this.getRpcUrl(input.chain);
     const provider = new JsonRpcProvider(rpcUrl);
     const throttler = Throttler.getInstance(input.chain);
@@ -137,7 +137,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     }
   }
 
-  async process(input: ProcessInput<ERC20Event>[]): Promise<Result<GTX, PluginError>> {
+  async process(input: ProcessInput<ERC20Event>[]): Promise<Result<GTX, OracleError>> {
     const emptyGtx = gtx.emptyGtx(this._blockchainRid);
     const selectedInput = input[Math.floor(Math.random() * input.length)];
     if (!selectedInput) return err({ type: "process_error", context: `No input data received` });
@@ -195,7 +195,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: ERC20Event): Promise<Result<GTX, PluginError>> {
+  async validate(gtx: GTX, preparedData: ERC20Event): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -209,7 +209,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     return ok(gtx);
   }
 
-  async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
+  async execute(_gtx: GTX): Promise<Result<boolean, OracleError>> {
     logger.debug(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
@@ -248,7 +248,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     // Try the preferred method first (getAddress with dataSlice)
     const primaryResult = Result.fromThrowable(
       () => getAddress(dataSlice(topic, 12)),
-      (error): PluginError => ({ type: "execute_error", context: `Failed to parse address using primary method: ${error}` })
+      (error): OracleError => ({ type: "execute_error", context: `Failed to parse address using primary method: ${error}` })
     )();
 
     // If successful, return the result
@@ -262,7 +262,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     // Try fallback method if primary method fails
     const fallbackResult = Result.fromThrowable(
       () => ethers.getAddress('0x' + topic.slice(-40)),
-      (error): PluginError => ({ type: "execute_error", context: `Failed to parse address using fallback method: ${error}` })
+      (error): OracleError => ({ type: "execute_error", context: `Failed to parse address using fallback method: ${error}` })
     )();
 
     // Return the fallback result value or undefined if both methods failed

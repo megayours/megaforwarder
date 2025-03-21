@@ -14,7 +14,7 @@ import { Interface } from "ethers";
 import type { TransactionResponse } from "ethers";
 import { Throttler } from "../util/throttle";
 import { err, ok, Result, ResultAsync } from "neverthrow";
-import type { PluginError } from "../util/errors";
+import type { OracleError } from "../util/errors";
 
 export type MocaStakeForwarderInput = {
   chain: string;
@@ -45,7 +45,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
   }
 
-  async prepare(input: MocaStakeForwarderInput): Promise<Result<StakingEvent[], PluginError>> {
+  async prepare(input: MocaStakeForwarderInput): Promise<Result<StakingEvent[], OracleError>> {
     const rpcUrl = this.getRpcUrl(input.chain);
     const provider = new JsonRpcProvider(rpcUrl);
     const throttler = Throttler.getInstance(input.chain);
@@ -101,7 +101,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     return err({ type: "prepare_error", context: `Invalid event name: ${input.eventName}` });
   }
 
-  private handleStaked(input: MocaStakeForwarderInput): Result<StakingEvent[], PluginError> {
+  private handleStaked(input: MocaStakeForwarderInput): Result<StakingEvent[], OracleError> {
     const from = this.safelyExtractAddress(input.event.topics[1]);
     if (!from) return err({ type: "prepare_error", context: `Invalid log topics` });
 
@@ -119,7 +119,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     }]);
   }
 
-  private handleStakedBehalf(input: MocaStakeForwarderInput, tx: TransactionResponse): Result<StakingEvent[], PluginError> {
+  private handleStakedBehalf(input: MocaStakeForwarderInput, tx: TransactionResponse): Result<StakingEvent[], OracleError> {
     const iface = new Interface([
       'function stakeBehalf(address[] calldata users, uint256[] calldata amounts)'
     ]);
@@ -155,7 +155,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     return ok(events);
   }
 
-  private handleUnstaked(input: MocaStakeForwarderInput): Result<StakingEvent[], PluginError> {
+  private handleUnstaked(input: MocaStakeForwarderInput): Result<StakingEvent[], OracleError> {
     const from = this.safelyExtractAddress(input.event.topics[1]);
     if (!from) return err({ type: "prepare_error", context: `Invalid log topics` });
 
@@ -173,7 +173,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     }]);
   }
 
-  async process(input: ProcessInput<StakingEvent[]>[]): Promise<Result<GTX, PluginError>> {
+  async process(input: ProcessInput<StakingEvent[]>[]): Promise<Result<GTX, OracleError>> {
     const emptyGtx = gtx.emptyGtx(this._blockchainRid);
     const selectedInput = input[Math.floor(Math.random() * input.length)];
     if (!selectedInput) return err({ type: "process_error", context: `No input data` });
@@ -234,7 +234,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: StakingEvent[]): Promise<Result<GTX, PluginError>> {
+  async validate(gtx: GTX, preparedData: StakingEvent[]): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -248,7 +248,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     return ok(gtx);
   }
 
-  async execute(_gtx: GTX): Promise<Result<boolean, PluginError>> {
+  async execute(_gtx: GTX): Promise<Result<boolean, OracleError>> {
     logger.debug(`Executing GTX`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
@@ -286,7 +286,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
 
     const result = Result.fromThrowable(
       () => getAddress(dataSlice(topic, 12)),
-      (error): PluginError => ({ type: "execute_error", context: `Failed to parse address using primary method: ${error}` })
+      (error): OracleError => ({ type: "execute_error", context: `Failed to parse address using primary method: ${error}` })
     )();
 
     if (result.isOk()) {

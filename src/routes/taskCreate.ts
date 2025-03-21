@@ -1,13 +1,13 @@
 import { Result } from "neverthrow";
 import { Task } from "../core/task/Task";
 import type { TaskCreationRequest } from "../core/types/requests/TaskCreationRequest";
-import type { TaskError } from "../util/errors";
+import type { OracleError } from "../util/errors";
 
 const taskCreate = async (req: Request) => {
   const body = await req.json() as TaskCreationRequest;
   const task = Result.fromThrowable(
     () => new Task(body.pluginId, body.input),
-    (error): TaskError => ({
+    (error): OracleError => ({
       type: 'plugin_error',
       context: `Failed to create task: ${error}`
     })

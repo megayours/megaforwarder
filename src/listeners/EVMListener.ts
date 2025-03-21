@@ -12,10 +12,10 @@ import { ERC20Forwarder, type ERC20ForwarderInput } from "../plugins/ERC20Forwar
 import { MocaStakeForwarder, type MocaStakeForwarderInput } from "../plugins/MocaStakeForwarder";
 import { Throttler } from "../util/throttle";
 import config from "../config";
-import type { ListenerError } from "../util/errors";
 import { err, ok, Result, ResultAsync } from "neverthrow";
 import { createCache, type Cache } from "cache-manager";
 import { secondsFromNow } from "../util/time";
+import type { OracleError } from "../util/errors";
 
 export type ContractInfo = {
   chain: "ethereum";
@@ -167,7 +167,7 @@ export class EVMListener extends Listener {
     });
   }
 
-  private async handleEvent(event: EventWrapper): Promise<Result<boolean, ListenerError>> {
+  private async handleEvent(event: EventWrapper): Promise<Result<boolean, OracleError>> {
     if (this._contractInfo.type === "erc721") {
       const input: ERC721ForwarderInput = {
         chain: this._contractInfo.chain,
@@ -181,7 +181,8 @@ export class EVMListener extends Listener {
           logger.info(`Skipping event ${this.uniqueId(event)} because it was marked as a non-error`, this.logMetadata());
           return ok(true);
         }
-        return err({ type: "task_error", context: result.error.context });
+        
+        return result;
       }
       return ok(result.value);
     } 
@@ -192,11 +193,7 @@ export class EVMListener extends Listener {
         event: event.event
       }
       const task = new Task(ERC20Forwarder.pluginId, input);
-      const result = await task.start();
-      if (result.isErr()) {
-        return err({ type: "task_error", context: result.error.context });
-      }
-      return ok(result.value);
+      return task.start();
     } 
     
     else if (this._contractInfo.type === "moca_stake") {
@@ -206,11 +203,7 @@ export class EVMListener extends Listener {
         event: event.event
       }
       const task = new Task(MocaStakeForwarder.pluginId, input);
-      const result = await task.start();
-      if (result.isErr()) {
-        return err({ type: "task_error", context: result.error.context });
-      }
-      return ok(result.value);
+      return task.start();
     } 
     
     else {

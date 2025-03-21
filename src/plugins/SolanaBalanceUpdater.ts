@@ -8,7 +8,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
 import { Throttler } from "../util/throttle";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
-import type { PluginError } from "../util/errors";
+import type { OracleError } from "../util/errors";
 
 type SolanaBalanceUpdaterInput = {
   tokenMint: string;
@@ -43,7 +43,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     this._megaYoursBlockchainRid = Buffer.from(config.abstractionChain.blockchainRid, "hex");
   }
 
-  async prepare(input: SolanaBalanceUpdaterInput): Promise<Result<BalanceUpdateEvent, PluginError>> {
+  async prepare(input: SolanaBalanceUpdaterInput): Promise<Result<BalanceUpdateEvent, OracleError>> {
     logger.info(`Preparing balance update for user account`, {
       tokenMint: input.tokenMint,
       decimals: input.decimals,
@@ -64,7 +64,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
           userPubkey,
           true // Allow owner off curve
         ),
-        (error): PluginError => ({ type: "permanent_error", context: `Error getting associated token address: ${error}` })
+        (error): OracleError => ({ type: "permanent_error", context: `Error getting associated token address: ${error}` })
       )
     );
 
@@ -86,7 +86,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
             userPubkey,
             { mint: mintPubkey }
           ),
-          (error: any): PluginError => ({ type: "prepare_error", context: `Error getting parsed token accounts: ${JSON.stringify(error)}` })
+          (error: any): OracleError => ({ type: "prepare_error", context: `Error getting parsed token accounts: ${JSON.stringify(error)}` })
         )
       );
       
@@ -106,7 +106,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
         const tokenAccountResult = await this._throttler.execute(() =>
           ResultAsync.fromPromise(
             getAccount(this._connection, tokenAddress.value),
-            (error: any): PluginError => {
+            (error: any): OracleError => {
               // If token account doesn't exist, this is not an error - the balance is just 0
               if (error.name === "TokenAccountNotFoundError") {
                 logger.info(`Token account not found for ${tokenAddress.value.toString()}, using 0 balance`);
@@ -144,7 +144,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     });
   }
 
-  async process(input: ProcessInput<BalanceUpdateEvent>[]): Promise<Result<GTX, PluginError>> {
+  async process(input: ProcessInput<BalanceUpdateEvent>[]): Promise<Result<GTX, OracleError>> {
     const selectedData = input[0];
     if (!selectedData) return err({ type: "process_error", context: `No input data` });
 
@@ -157,7 +157,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: BalanceUpdateEvent): Promise<Result<GTX, PluginError>> {
+  async validate(gtx: GTX, preparedData: BalanceUpdateEvent): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -171,7 +171,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     return ok(gtx);
   }
 
-  async execute(_gtx: GTX): Promise<Result<SolanaBalanceUpdaterOutput, PluginError>> {
+  async execute(_gtx: GTX): Promise<Result<SolanaBalanceUpdaterOutput, OracleError>> {
     logger.debug(`Executing GTX for balance update`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,

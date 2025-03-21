@@ -3,7 +3,7 @@ import config from "../../config";
 import type { IPlugin } from "../interfaces/IPlugin";
 import type { PluginMetadata } from "../types/PluginMetadata";
 import type { ProcessInput } from "../types/Protocol";
-import type { PluginError } from "../../util/errors";
+import type { OracleError } from "../../util/errors";
 
 export abstract class Plugin<TPluginInput, TPrepareOutput, TValidateData, TPluginOutput> implements IPlugin<TPluginInput, TPrepareOutput, TValidateData, TPluginOutput> {
   private _metadata: PluginMetadata;
@@ -26,8 +26,8 @@ export abstract class Plugin<TPluginInput, TPrepareOutput, TValidateData, TPlugi
     return this._config;
   }
 
-  abstract prepare(input: TPluginInput): Promise<Result<TPrepareOutput, PluginError>>;
-  abstract process(preparedOutputs: ProcessInput<TPrepareOutput>[]): Promise<Result<TValidateData, PluginError>>;
-  abstract validate(dataToValidate: TValidateData, preparedData: TPrepareOutput): Promise<Result<TValidateData, PluginError>>;
-  abstract execute(finalData: TValidateData): Promise<Result<TPluginOutput, PluginError>>;
+  abstract prepare(input: TPluginInput): Promise<Result<TPrepareOutput, OracleError>>;
+  abstract process(preparedOutputs: ProcessInput<TPrepareOutput>[]): Promise<Result<TValidateData, OracleError>>;
+  abstract validate(dataToValidate: TValidateData, preparedData: TPrepareOutput): Promise<Result<TValidateData, OracleError>>;
+  abstract execute(finalData: TValidateData): Promise<Result<TPluginOutput, OracleError>>;
 }
