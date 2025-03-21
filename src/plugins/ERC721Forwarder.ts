@@ -145,6 +145,10 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
 
     let tx: GTX;
     if (selectedInput.data.metadata && selectedInput.data.tokenUri) {
+      logger.info(`Processing ERC721 mint`, {
+        contractAddress: selectedInput.data.contractAddress,
+        tokenId: selectedInput.data.tokenId,
+      });
       tx = gtx.addTransactionToGtx('evm.erc721.mint', [
         selectedInput.data.chain,
         selectedInput.data.blockNumber,
@@ -157,6 +161,10 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
         selectedInput.data.collection ?? null
       ], emptyGtx);
     } else {
+      logger.info(`Processing ERC721 transfer`, {
+        contractAddress: selectedInput.data.contractAddress,
+        tokenId: selectedInput.data.tokenId,
+      });
       tx = gtx.addTransactionToGtx('evm.erc721.transfer', [
         selectedInput.data.chain,
         selectedInput.data.blockNumber,
@@ -202,8 +210,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       if (error.status === 409) {
         logger.info(`Transaction already in database, considering as success`);
       } else {
-        // Re-throw any other error
-        throw error;
+        return err({ type: "execute_error", context: error?.message ?? "Unknown error" });
       }
     }
 

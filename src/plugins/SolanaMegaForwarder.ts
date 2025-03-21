@@ -157,11 +157,10 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
       await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.ClusterAnchoring);
       logger.info(`Executed successfully`);
     } catch (error: any) {
-      // Check if this is a 409 error (Transaction already in database)
-      if (error.status >= 400 && error.status < 500) {
-        logger.info(`Ignoring transaction, considering as success`);
+      if (error.status === 409) {
+        logger.info(`Transaction already in database, considering as success`);
       } else {
-        logger.error(`Error executing transaction`, error);
+        return err({ type: "execute_error", context: error?.message ?? "Unknown error" });
       }
     }
 

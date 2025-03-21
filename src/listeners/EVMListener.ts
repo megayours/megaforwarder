@@ -15,6 +15,7 @@ import config from "../config";
 import type { ListenerError } from "../util/errors";
 import { err, ok, Result } from "neverthrow";
 import { createCache, type Cache } from "cache-manager";
+import { secondsFromNow } from "../util/time";
 
 export type ContractInfo = {
   chain: "ethereum";
@@ -92,7 +93,7 @@ export class EVMListener extends Listener {
       const success = await this.handleEvent(event);
       if (success.isErr() || !success.value) {
         logger.error(`Failed to handle event: ${event.event.transactionHash}`, { contract: this._contractInfo.contract });
-        return;
+        return secondsFromNow(15);
       }
 
       this._cache.set(this.uniqueId(event), success);
@@ -100,6 +101,7 @@ export class EVMListener extends Listener {
 
     this._currentBlockNumber = blockNumber;
     logger.info(`Processed to block ${blockNumber}`, { contract: this._contractInfo.contract });
+    return secondsFromNow(1);
   }
 
   private uniqueId(event: EventWrapper) {

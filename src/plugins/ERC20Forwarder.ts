@@ -203,8 +203,8 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
       logger.info(`Executed successfully`);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
-      if (error.status >= 400 && error.status !== 499) {
-        logger.info(`Permanent error, marking as success`);
+      if (error.status === 409) {
+        logger.info(`Transaction already in database, considering as success`);
       } else {
         return err({ type: "execute_error", context: error?.message ?? "Unknown error" });
       }

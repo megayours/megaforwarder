@@ -1,6 +1,7 @@
 import config from "../../config";
+import type { IListener } from "../interfaces/IListener";
 
-export abstract class Listener {
+export abstract class Listener implements IListener {
   public readonly id: string;
   private _config: Record<string, unknown>;
 
@@ -18,5 +19,5 @@ export abstract class Listener {
     return this._config;
   }
 
-  abstract run(): Promise<void>;
+  abstract run(): Promise<number>;
 }

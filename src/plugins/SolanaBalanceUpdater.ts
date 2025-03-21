@@ -181,21 +181,19 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     try {
       await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.ClusterAnchoring);
       logger.info(`Balance update forwarded successfully`);
-      return ok({
-        message: "Balance update forwarded successfully"
-      });
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
       if (error.status === 409) {
         logger.info(`Transaction already in database, considering as success`);
-        return ok({
-          message: "Balance update forwarded successfully"
-        });
       } else {
         // Log and return failure for any other error
         logger.error(`Failed to update balance:`, error);
         return err({ type: "execute_error", context: `Error: ${error}` });
       }
     }
+
+    return ok({
+      message: "Balance update forwarded successfully"
+    });
   }
 } 

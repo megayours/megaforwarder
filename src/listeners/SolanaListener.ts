@@ -8,6 +8,7 @@ import { logger } from "../util/monitoring";
 import { createClient } from "postchain-client";
 import config from "../config";
 import { Throttler } from "../util/throttle";
+import { minutesFromNow, secondsFromNow } from "../util/time";
 
 const BLOCK_HEIGHT_INCREMENT = 100;
 
@@ -63,7 +64,7 @@ export class SolanaListener extends Listener implements IListener {
     }
   }
 
-  async run(): Promise<void> {
+  async run(): Promise<number> {
     const previousIndexedSlot = await this.getSlot();
 
     if (previousIndexedSlot > this._currentBlockHeight) {
@@ -74,7 +75,7 @@ export class SolanaListener extends Listener implements IListener {
     try {
       // Validate program ID if not already validated
       if (!this._programPubkey && !this.validateAndSetProgramId()) {
-        return;
+        return minutesFromNow(10);
       }
 
       if (!this._programPubkey) {
@@ -106,7 +107,7 @@ export class SolanaListener extends Listener implements IListener {
       if (signatures.length === 0) {
         logger.debug(`No new transactions found for the program in this period`);
         this._currentBlockHeight = currentSlot;
-        return;
+        return minutesFromNow(1);
       }
 
       logger.debug(`Found ${signatures.length} new transactions for program ${this._programPubkey.toBase58()}`);
@@ -130,15 +131,17 @@ export class SolanaListener extends Listener implements IListener {
             const result = await task.start();
             if (result.isErr()) {
               logger.error(`Failed to handle transaction: ${sig.signature}`);
-              return;
+              return secondsFromNow(5);
             }
           }
         }
       }
 
       this._currentBlockHeight = Math.min(currentSlot, this._currentBlockHeight);
+      return secondsFromNow(1);
     } catch (error) {
       console.error('Error in Solana listener:', error);
+      return secondsFromNow(5);
     }
   }
 }

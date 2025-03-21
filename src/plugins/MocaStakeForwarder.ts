@@ -240,8 +240,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
       if (error.status === 409) {
         logger.info(`Transaction already in database, considering as success`);
       } else {
-        // Re-throw any other error
-        throw error;
+        return err({ type: "execute_error", context: error?.message ?? "Unknown error" });
       }
     }
 
