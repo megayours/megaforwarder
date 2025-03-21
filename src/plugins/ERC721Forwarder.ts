@@ -48,6 +48,8 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
   }
 
   async prepare(input: ERC721ForwarderInput): Promise<Result<ERC721Event, OracleError>> {
+    const timestamp = Date.now();
+    logger.info(`Preparing ERC721Forwarder`, { input });
     const rpcUrl = this.getRpcUrl(input.chain);
     const provider = new JsonRpcProvider(rpcUrl);
     const throttler = Throttler.getInstance(input.chain);
@@ -64,6 +66,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     );
     if (!transaction) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
 
+    logger.info(`Received transaction in ${Date.now() - timestamp}ms`, { input });
     // Verify transaction was included in a block
     if (!transaction.blockNumber) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
 
@@ -73,6 +76,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     );
     if (!receipt) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
 
+    logger.info(`Received transaction receipt in ${Date.now() - timestamp}ms`, { input });
     // Verify that the transaction was successful
     if (receipt.status !== 1) return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
 
@@ -114,12 +118,16 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
         }
         throw new Error('tokenURI function not found on contract');
       });
+      logger.info(`Received token URI in ${Date.now() - timestamp}ms`, { input, tokenUri });
       const preparedTokenUri = this.routeViaGateway(tokenUri!);
       logger.debug(`Prepared token URI: ${preparedTokenUri}`);
       const response = await fetch(preparedTokenUri);
       const json = await response.json();
       metadata = JSON.stringify(json);
+      logger.info(`Received metadata in ${Date.now() - timestamp}ms`, { input, metadata, tokenUri });
     }
+
+    logger.info(`Received all data in ${Date.now() - timestamp}ms`, { input });
 
     return ok({
       chain: input.chain,
