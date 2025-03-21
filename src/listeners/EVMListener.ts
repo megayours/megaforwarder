@@ -104,7 +104,7 @@ export class EVMListener extends Listener {
 
       const result = await this.handleEvent(event);
       if (result.isErr() || !result.value) {
-        logger.error(`Failed to handle event: ${event.event.transactionHash}`, this.logMetadata(), result);
+        logger.error(`Failed to handle event: ${event.event.transactionHash}, error: ${JSON.stringify(result)}`, this.logMetadata());
         return secondsFromNow(15);
       }
 
