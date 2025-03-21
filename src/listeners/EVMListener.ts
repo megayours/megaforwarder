@@ -177,6 +177,10 @@ export class EVMListener extends Listener {
       const task = new Task(ERC721Forwarder.pluginId, input);
       const result = await task.start();
       if (result.isErr()) {
+        if (result.error.type === "non_error") {
+          logger.info(`Skipping event ${this.uniqueId(event)} because it was marked as a non-error`, this.logMetadata());
+          return ok(true);
+        }
         return err({ type: "task_error", context: result.error.context });
       }
       return ok(result.value);
