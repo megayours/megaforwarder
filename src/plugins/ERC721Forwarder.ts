@@ -12,7 +12,7 @@ import config from "../config";
 import { hexToBuffer } from "../util/hex";
 import { Throttler } from "../util/throttle";
 import erc721Abi from "../util/abis/erc721";
-import { err, ok, type Result } from "neverthrow";
+import { err, ok, ResultAsync, type Result } from "neverthrow";
 import type { PluginError } from "../util/errors";
 
 export type ERC721ForwarderInput = {
@@ -143,9 +143,28 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
 
     const eventId = `${selectedInput.data.transactionHash}-${selectedInput.data.logIndex}`;
 
+    const client = await createClient({
+      directoryNodeUrlPool: this._directoryNodeUrlPool,
+      blockchainRid: this._blockchainRid.toString('hex')
+    })
+
+    const alreadyProcessed = await ResultAsync.fromPromise(client.query('evm.is_event_processed', {
+      contract: Buffer.from(selectedInput.data.contractAddress.replace('0x', ''), 'hex'),
+      event_id: eventId
+    }), (error) => error);
+
+    if (alreadyProcessed.isErr()) {
+      return err({ type: "process_error", context: `Failed to check if event is already processed` });
+    }
+
+    if (alreadyProcessed.value) {
+      return err({ type: "non_error", context: `Event already processed` });
+    }
+
     let tx: GTX;
     if (selectedInput.data.metadata && selectedInput.data.tokenUri) {
       logger.info(`Processing ERC721 mint`, {
+        eventId,
         contractAddress: selectedInput.data.contractAddress,
         tokenId: selectedInput.data.tokenId,
       });
@@ -162,6 +181,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       ], emptyGtx);
     } else {
       logger.info(`Processing ERC721 transfer`, {
+        eventId,
         contractAddress: selectedInput.data.contractAddress,
         tokenId: selectedInput.data.tokenId,
       });

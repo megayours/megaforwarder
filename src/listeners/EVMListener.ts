@@ -103,7 +103,11 @@ export class EVMListener extends Listener {
       }
 
       const result = await this.handleEvent(event);
-      if (result.isErr() || !result.value) {
+      if (result.isErr()) {
+        if (result.error.type === "non_error") {
+          logger.info(`Skipping event ${this.uniqueId(event)} because it was already processed`, this.logMetadata());
+          continue;
+        }
         logger.error(`Failed to handle event: ${event.event.transactionHash}, error: ${JSON.stringify(result)}`, this.logMetadata());
         return secondsFromNow(15);
       }
