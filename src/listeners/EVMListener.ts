@@ -102,13 +102,13 @@ export class EVMListener extends Listener {
         continue;
       }
 
-      const success = await this.handleEvent(event);
-      if (success.isErr() || !success.value) {
-        logger.error(`Failed to handle event: ${event.event.transactionHash}`, this.logMetadata());
+      const result = await this.handleEvent(event);
+      if (result.isErr() || !result.value) {
+        logger.error(`Failed to handle event: ${event.event.transactionHash}`, this.logMetadata(), result);
         return secondsFromNow(15);
       }
 
-      this._cache.set(this.uniqueId(event), success);
+      this._cache.set(this.uniqueId(event), result);
     }
 
     this._currentBlockNumber = blockNumber;
