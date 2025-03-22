@@ -5,7 +5,7 @@ import taskCreate from "./routes/taskCreate";
 import taskValidate from "./routes/taskValidate";
 import taskPrepare from "./routes/taskPrepare";
 import { ListenerRegistry } from "./core/listener/ListenerRegistry";
-import { logger } from "./util/monitoring";
+import { logger, register } from "./util/monitoring";
 import { EVMListener } from "./listeners/EVMListener";
 import type { Contract, ContractEventName } from "ethers";
 import erc721Abi from "./util/abis/erc721";
@@ -138,5 +138,13 @@ const apiServer = Bun.serve({
   }
 });
 
+const metricsServer = Bun.serve({
+  port: 9090,
+  fetch: async (req) => {
+    return new Response(await register.metrics(), { headers: { "Content-Type": register.contentType } });
+  }
+});
+
 logger.info(`${config.id} running at ${server.url}`);
 logger.info(`${config.id} API running at ${apiServer.url}`);
+logger.info(`${config.id} Metrics running at ${metricsServer.url}`);
