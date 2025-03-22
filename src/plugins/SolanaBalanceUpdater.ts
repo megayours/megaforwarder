@@ -4,12 +4,11 @@ import { logger } from "../util/monitoring";
 import config from "../config";
 import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import { ecdsaSign } from "secp256k1";
-import { Connection, PublicKey } from "@solana/web3.js";
-import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
-import { Throttler } from "../util/throttle";
+import { Connection, PublicKey, type AccountInfo, type ParsedAccountData, type RpcResponseAndContext } from "@solana/web3.js";
+import { getAccount, getAssociatedTokenAddress, type Account } from "@solana/spl-token";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
-import { MERKLE_HASH_VERSION } from "../util/constants";
+import { executeThrottled } from "../util/throttle";
 
 type SolanaBalanceUpdaterInput = {
   tokenMint: string;
@@ -31,7 +30,6 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
   private readonly _connection: Connection;
   private readonly _directoryNodeUrlPool: string[];
   private readonly _megaYoursBlockchainRid: Buffer;
-  private readonly _throttler = Throttler.getInstance("solana", 1);
 
   constructor() {
     super({ id: SolanaBalanceUpdater.pluginId });
@@ -58,15 +56,14 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     logger.debug(`Looking up token account for mint ${mintPubkey.toString()} and user ${userPubkey.toString()}`);
 
     // Get the associated token address for this user and token mint
-    const tokenAddress = await this._throttler.execute(() =>
-      ResultAsync.fromPromise(
+    const tokenAddress = await executeThrottled<PublicKey>(
+      "solana",
+      () =>
         getAssociatedTokenAddress(
           mintPubkey,
           userPubkey,
           true // Allow owner off curve
-        ),
-        (error): OracleError => ({ type: "permanent_error", context: `Error getting associated token address: ${error}` })
-      )
+        )
     );
 
     if (tokenAddress.isErr()) {
@@ -81,16 +78,11 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     // First, try to find all token accounts using getParsedTokenAccountsByOwner
     // This is more reliable but potentially more expensive
     try {
-      const tokenAccounts = await this._throttler.execute(() => 
-        ResultAsync.fromPromise(
-          this._connection.getParsedTokenAccountsByOwner(
-            userPubkey,
-            { mint: mintPubkey }
-          ),
-          (error: any): OracleError => ({ type: "prepare_error", context: `Error getting parsed token accounts: ${JSON.stringify(error)}` })
-        )
+      const tokenAccounts = await executeThrottled<RpcResponseAndContext<{ pubkey: PublicKey; account: AccountInfo<ParsedAccountData>; }[]>>(
+        "solana",
+        () => this._connection.getParsedTokenAccountsByOwner(userPubkey, { mint: mintPubkey })
       );
-      
+
       if (tokenAccounts.isOk() && tokenAccounts.value.value.length > 0) {
         const accountInfo = tokenAccounts.value.value[0];
         if (accountInfo && accountInfo.account.data.parsed.info) {
@@ -102,20 +94,11 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
         }
       } else if (tokenAccounts.isErr()) {
         logger.warn(`Error getting parsed token accounts, falling back to ATA: ${JSON.stringify(tokenAccounts.error)}`);
-        
+
         // Fallback to the ATA method
-        const tokenAccountResult = await this._throttler.execute(() =>
-          ResultAsync.fromPromise(
-            getAccount(this._connection, tokenAddress.value),
-            (error: any): OracleError => {
-              // If token account doesn't exist, this is not an error - the balance is just 0
-              if (error.name === "TokenAccountNotFoundError") {
-                logger.info(`Token account not found for ${tokenAddress.value.toString()}, using 0 balance`);
-                return { type: "non_error", context: "Token account not found" };
-              }
-              return { type: "prepare_error", context: `Error getting token account: ${JSON.stringify(error)}` };
-            }
-          )
+        const tokenAccountResult = await executeThrottled<Account>(
+          "solana",
+          () => getAccount(this._connection, tokenAddress.value)
         );
 
         if (tokenAccountResult.isOk()) {

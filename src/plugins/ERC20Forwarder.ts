@@ -1,19 +1,20 @@
-import type { Log } from "ethers";
+import type { Log, TransactionResponse } from "ethers";
 import { Plugin } from "../core/plugin/Plugin";
 import type { EventLog } from "ethers";
 import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import type { ProcessInput } from "../core/types/Protocol";
 import { logger } from "../util/monitoring";
 import { JsonRpcProvider } from "ethers/providers";
-import { dataSlice, ethers } from "ethers";
+import { dataSlice, ethers, Transaction } from "ethers";
 import { getAddress } from "ethers/address";
 import { ecdsaSign } from "secp256k1";
 import config from "../config";
 import { hexToBuffer } from "../util/hex";
-import { Throttler } from "../util/throttle";
 import erc20Abi from "../util/abis/erc20";
 import type { OracleError } from "../util/errors";
 import { err, ok, Result, ResultAsync } from "neverthrow";
+import { executeThrottled } from "../util/throttle";
+import type { TransactionReceipt } from "ethers";
 
 export type ERC20ForwarderInput = {
   chain: string;
@@ -50,7 +51,6 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
   async prepare(input: ERC20ForwarderInput): Promise<Result<ERC20Event, OracleError>> {
     const rpcUrl = this.getRpcUrl(input.chain);
     const provider = new JsonRpcProvider(rpcUrl);
-    const throttler = Throttler.getInstance(input.chain);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;
@@ -59,8 +59,9 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     const logIndex = input.event.index;
 
     // Check that transaction exists
-    const transaction = await throttler.execute(() =>
-      ResultAsync.fromPromise(provider.getTransaction(transactionHash), (error) => error)
+    const transaction = await executeThrottled<TransactionResponse | null>(
+      rpcUrl,
+      () => provider.getTransaction(transactionHash)
     );
     if (transaction.isErr()) {
       return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
@@ -72,8 +73,9 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     }
 
     // Get transaction receipt to access logs
-    const receipt = await throttler.execute(() =>
-      ResultAsync.fromPromise(provider.getTransactionReceipt(transactionHash), (error) => error)
+    const receipt = await executeThrottled<null | TransactionReceipt>(
+      rpcUrl,
+      () => provider.getTransactionReceipt(transactionHash)
     );
     if (receipt.isErr()) {
       return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
@@ -85,7 +87,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     }
 
     // Find the matching log in the receipt
-    const matchingLog = receipt.value?.logs.find(log =>
+    const matchingLog = receipt.value?.logs.find((log: Log) =>
       log.blockNumber === blockNumber &&
       log.index === logIndex &&
       log.address.toLowerCase() === contractAddress.toLowerCase()
@@ -113,9 +115,9 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     if (isMint) {
       const contract = new ethers.Contract(contractAddress, erc20Abi, provider);
       const [decimals, name, symbol] = await Promise.all([
-        throttler.execute(() => ResultAsync.fromPromise(contract.decimals!(), (error) => error)),
-        throttler.execute(() => ResultAsync.fromPromise(contract.name!(), (error) => error)),
-        throttler.execute(() => ResultAsync.fromPromise(contract.symbol!(), (error) => error))
+        executeThrottled<number>(rpcUrl, () => contract.decimals!()),
+        executeThrottled<string>(rpcUrl, () => contract.name!()),
+        executeThrottled<string>(rpcUrl, () => contract.symbol!())
       ]);
 
       if (decimals.isErr()) return err({ type: "prepare_error", context: `Failed to get decimals` });

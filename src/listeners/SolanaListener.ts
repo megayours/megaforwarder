@@ -1,14 +1,14 @@
 import { createCache, type Cache } from "cache-manager";
 import type { IListener } from "../core/interfaces/IListener";
 import { Task } from "../core/task/Task";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey, type ConfirmedSignatureInfo, type VersionedTransactionResponse } from "@solana/web3.js";
 import { Listener } from "../core/listener/Listener";
 import { SolanaMegaForwarder } from "../plugins/SolanaMegaForwarder";
 import { logger } from "../util/monitoring";
 import { createClient } from "postchain-client";
 import config from "../config";
-import { Throttler } from "../util/throttle";
 import { minutesFromNow, secondsFromNow } from "../util/time";
+import { executeThrottled } from "../util/throttle";
 
 const BLOCK_HEIGHT_INCREMENT = 100;
 
@@ -20,7 +20,6 @@ export class SolanaListener extends Listener implements IListener {
   private readonly _directoryNodeUrlPool: string[];
   private _currentBlockHeight: number = -1;
   private _programPubkey: PublicKey | null = null;
-  private _throttler = Throttler.getInstance("solana", 1);
 
   constructor() {
     super("solana-listener");
@@ -65,10 +64,18 @@ export class SolanaListener extends Listener implements IListener {
   }
 
   async run(): Promise<number> {
-    const previousIndexedSlot = await this.getSlot();
+    const previousIndexedSlot = await executeThrottled<number>(
+      this._rpcUrl, 
+      () => this.getSlot()
+    );
 
-    if (previousIndexedSlot > this._currentBlockHeight) {
-      this._currentBlockHeight = previousIndexedSlot;
+    if (previousIndexedSlot.isErr()) {
+      logger.error(`Failed to get slot`);
+      return secondsFromNow(60);
+    }
+
+    if (previousIndexedSlot.value > this._currentBlockHeight) {
+      this._currentBlockHeight = previousIndexedSlot.value;
     }
 
     const connection = new Connection(this._rpcUrl);
@@ -82,10 +89,16 @@ export class SolanaListener extends Listener implements IListener {
         throw new Error('Program public key not initialized');
       }
 
-      const currentSlot = await this._throttler.execute(() => connection.getSlot());
+      const currentSlot = await executeThrottled<number>(this._rpcUrl, () => connection.getSlot());
+
+      if (currentSlot.isErr()) {
+        logger.error(`Failed to get slot`);
+        return secondsFromNow(60);
+      }
+      
 
       // Get all signatures for the program
-      let signatures = await this._throttler.execute(() => connection.getSignaturesForAddress(
+      let signaturesResult = await executeThrottled<ConfirmedSignatureInfo[]>(this._rpcUrl, () => connection.getSignaturesForAddress(
         this._programPubkey!,
         {
           minContextSlot: this._currentBlockHeight,
@@ -93,6 +106,13 @@ export class SolanaListener extends Listener implements IListener {
         },
         'confirmed'
       ));
+
+      if (signaturesResult.isErr() || !signaturesResult.value) {
+        logger.error(`Failed to get signatures`);
+        return secondsFromNow(60);
+      }
+
+      let signatures = signaturesResult.value;
 
       // Filter out cached signatures properly
       const uncachedSignatures = [];
@@ -106,7 +126,7 @@ export class SolanaListener extends Listener implements IListener {
 
       if (signatures.length === 0) {
         logger.debug(`No new transactions found for the program in this period`);
-        this._currentBlockHeight = currentSlot;
+        this._currentBlockHeight = currentSlot.value;
         return minutesFromNow(1);
       }
 
@@ -121,12 +141,18 @@ export class SolanaListener extends Listener implements IListener {
         logger.debug(`Cached ${sig.signature}`);
 
         // Get the full transaction details
-        const tx = await this._throttler.execute(() => connection.getTransaction(sig.signature, {
+        const tx = await executeThrottled<VersionedTransactionResponse | null>(this._rpcUrl, () => connection.getTransaction(sig.signature, {
           maxSupportedTransactionVersion: 0
         }));
-        await this._cache.set(sig.signature, tx);
-        if (tx) {
-          if (tx.meta?.logMessages?.some(log => log.includes('Operation name:'))) {
+
+        if (tx.isErr()) {
+          logger.error(`Failed to get transaction`);
+          return secondsFromNow(60);
+        }
+
+        await this._cache.set(sig.signature, tx.value);
+        if (tx.value) {
+          if (tx.value.meta?.logMessages?.some((log: string) => log.includes('Operation name:'))) {
             const task = new Task(SolanaMegaForwarder.pluginId, { txSignature: sig.signature });
             const result = await task.start();
             if (result.isErr()) {
@@ -141,7 +167,7 @@ export class SolanaListener extends Listener implements IListener {
         }
       }
 
-      this._currentBlockHeight = Math.min(currentSlot, this._currentBlockHeight);
+      this._currentBlockHeight = Math.min(currentSlot.value, this._currentBlockHeight);
       return secondsFromNow(1);
     } catch (error) {
       console.error('Error in Solana listener:', error);

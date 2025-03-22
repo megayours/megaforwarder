@@ -12,10 +12,10 @@ import config from "../config";
 import { hexToBuffer } from "../util/hex";
 import { Interface } from "ethers";
 import type { TransactionResponse } from "ethers";
-import { Throttler } from "../util/throttle";
 import { err, ok, Result, ResultAsync } from "neverthrow";
 import type { OracleError } from "../util/errors";
-import { MERKLE_HASH_VERSION } from "../util/constants";
+import { executeThrottled } from "../util/throttle";
+import type { TransactionReceipt } from "ethers";
 
 export type MocaStakeForwarderInput = {
   chain: string;
@@ -49,7 +49,6 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
   async prepare(input: MocaStakeForwarderInput): Promise<Result<StakingEvent[], OracleError>> {
     const rpcUrl = this.getRpcUrl(input.chain);
     const provider = new JsonRpcProvider(rpcUrl);
-    const throttler = Throttler.getInstance(input.chain);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;
@@ -58,25 +57,27 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     const logIndex = input.event.index;
 
     // Check that transaction exists
-    const transaction = await throttler.execute(() =>
-      provider.getTransaction(transactionHash)
+    const transaction = await executeThrottled<TransactionResponse | null>(
+      rpcUrl,
+      () => provider.getTransaction(transactionHash)
     );
-    if (!transaction) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
+    if (transaction.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
 
     // Verify transaction was included in a block
-    if (!transaction.blockNumber) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
+    if (transaction.value?.blockNumber === null) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
 
     // Get transaction receipt to access logs
-    const receipt = await throttler.execute(() =>
-      provider.getTransactionReceipt(transactionHash)
+    const receipt = await executeThrottled<TransactionReceipt | null>(
+      rpcUrl,
+      () => provider.getTransactionReceipt(transactionHash)
     );
-    if (!receipt) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
+    if (receipt.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
 
     // Verify that the transaction was successful
-    if (receipt.status !== 1) return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
+    if (receipt.value?.status !== 1) return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
 
     // Find the matching log in the receipt
-    const matchingLog = receipt.logs.find(log =>
+    const matchingLog = receipt.value?.logs.find(log =>
       log.blockNumber === blockNumber &&
       log.index === logIndex &&
       log.address.toLowerCase() === contractAddress.toLowerCase()
@@ -94,7 +95,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     if (input.eventName === "Staked") {
       return this.handleStaked(input);
     } else if (input.eventName === "StakedBehalf") {
-      return this.handleStakedBehalf(input, transaction);
+      return this.handleStakedBehalf(input, transaction.value!);
     } else if (input.eventName === "Unstaked") {
       return this.handleUnstaked(input);
     }

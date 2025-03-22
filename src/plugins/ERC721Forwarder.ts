@@ -1,4 +1,4 @@
-import type { Log } from "ethers";
+import type { Log, TransactionResponse } from "ethers";
 import { Plugin } from "../core/plugin/Plugin";
 import type { EventLog } from "ethers";
 import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
@@ -10,11 +10,11 @@ import { getAddress } from "ethers/address";
 import { ecdsaSign } from "secp256k1";
 import config from "../config";
 import { hexToBuffer } from "../util/hex";
-import { Throttler } from "../util/throttle";
 import erc721Abi from "../util/abis/erc721";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
-import { MERKLE_HASH_VERSION } from "../util/constants";
+import { executeThrottled } from "../util/throttle";
+import type { TransactionReceipt } from "ethers";
 
 export type ERC721ForwarderInput = {
   chain: string;
@@ -52,7 +52,6 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     const timestamp = Date.now();
     const rpcUrl = this.getRpcUrl(input.chain);
     const provider = new JsonRpcProvider(rpcUrl);
-    const throttler = Throttler.getInstance(input.chain);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;
@@ -61,25 +60,27 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     const logIndex = input.event.index;
 
     // Check that transaction exists
-    const transaction = await throttler.execute(() =>
-      provider.getTransaction(transactionHash)
+    const transaction = await executeThrottled<TransactionResponse | null>(
+      rpcUrl,
+      () => provider.getTransaction(transactionHash)
     );
-    if (!transaction) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
+    if (transaction.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
 
     // Verify transaction was included in a block
-    if (!transaction.blockNumber) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
+    if (transaction.value?.blockNumber === null) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
 
     // Get transaction receipt to access logs
-    const receipt = await throttler.execute(() =>
-      provider.getTransactionReceipt(transactionHash)
+    const receipt = await executeThrottled<null | TransactionReceipt>(
+      rpcUrl,
+      () => provider.getTransactionReceipt(transactionHash)
     );
-    if (!receipt) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
+    if (receipt.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
 
     // Verify that the transaction was successful
-    if (receipt.status !== 1) return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
+    if (receipt.value?.status !== 1) return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
 
     // Find the matching log in the receipt
-    const matchingLog = receipt.logs.find(log =>
+    const matchingLog = receipt.value?.logs.find((log: Log) =>
       log.blockNumber === blockNumber &&
       log.index === logIndex &&
       log.address.toLowerCase() === contractAddress.toLowerCase()
@@ -109,13 +110,10 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       const contract = new Contract(contractAddress, erc721Abi, provider);
       if (!contract.tokenURI) return err({ type: "prepare_error", context: `Token URI not found on contract` });
 
-      const tokenUriResult = await throttler.execute(() => {
-        // Ensure tokenURI exists before calling it
-        if (typeof contract.tokenURI === 'function') {
-          return ResultAsync.fromPromise(contract.tokenURI(tokenId), (error) => error);
-        }
-        return err({ type: "prepare_error", context: `Token URI not found on contract` });
-      });
+      const tokenUriResult = await executeThrottled<string>(
+        rpcUrl,
+        () => contract.tokenURI!(tokenId)
+      );
 
       if (tokenUriResult.isErr()) {
         return err({ type: "prepare_error", context: `Failed to get token URI` });

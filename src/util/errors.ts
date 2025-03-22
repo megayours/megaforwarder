@@ -7,4 +7,6 @@ export type OracleError =
   | { type: 'non_error'; context?: string }
   | { type: 'plugin_error'; context?: string }
   | { type: 'insufficient_peers'; context?: string }
-  | { type: 'timeout'; context?: string };
+  | { type: 'timeout'; context?: string }
+  | { type: 'unsupported_contract_type'; context?: string }
+  | { type: 'throttle_error'; context?: string };

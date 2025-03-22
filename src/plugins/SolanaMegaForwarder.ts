@@ -7,7 +7,7 @@ import { Plugin } from "../core/plugin/Plugin";
 import { logger } from "../util/monitoring";
 import { err, ok, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
-import { MERKLE_HASH_VERSION } from "../util/constants";
+import { executeThrottled } from "../util/throttle";
 
 type SolanaMegaForwarderInput = {
   txSignature: string;
@@ -73,16 +73,19 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
   }
 
   async prepare(input: SolanaMegaForwarderInput): Promise<Result<Event, OracleError>> {
-    const transaction = await this._connection.getTransaction(input.txSignature, {
-      commitment: "confirmed",
-      maxSupportedTransactionVersion: 0,
-    });
+    const transaction = await executeThrottled<VersionedTransactionResponse | null>(
+      "solana",
+      () => this._connection.getTransaction(input.txSignature, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      })
+    );
 
-    if (!transaction) {
+    if (transaction.isErr()) {
       return err({ type: "prepare_error", context: `Transaction not found` });
     }
 
-    const logs = transaction.meta?.logMessages;
+    const logs = transaction.value?.meta?.logMessages;
 
     if (!logs) {
       return err({ type: "prepare_error", context: `No logs found` });
@@ -112,9 +115,9 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     const param = paramParts[1]!.trim();
 
     if (operation === 'solana.megadata.register_token') {
-      return this.handleTokenRegistration(input.txSignature, transaction, JSON.parse(param));
+      return this.handleTokenRegistration(input.txSignature, transaction.value!, JSON.parse(param));
     } else if (operation === 'solana.megadata.update_metadata') {
-      return this.handleTokenUpdate(input.txSignature, transaction, JSON.parse(param));
+      return this.handleTokenUpdate(input.txSignature, transaction.value!, JSON.parse(param));
     } else {
       const args = [param];
       logger.info(`Misc operation`, operation);

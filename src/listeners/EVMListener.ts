@@ -10,12 +10,12 @@ import { ERC721Forwarder, type ERC721ForwarderInput } from "../plugins/ERC721For
 import { Task } from "../core/task/Task";
 import { ERC20Forwarder, type ERC20ForwarderInput } from "../plugins/ERC20Forwarder";
 import { MocaStakeForwarder, type MocaStakeForwarderInput } from "../plugins/MocaStakeForwarder";
-import { Throttler } from "../util/throttle";
 import config from "../config";
-import { err, ok, Result, ResultAsync } from "neverthrow";
+import { err, ok, Result } from "neverthrow";
 import { createCache, type Cache } from "cache-manager";
 import { secondsFromNow } from "../util/time";
 import type { OracleError } from "../util/errors";
+import { executeThrottled } from "../util/throttle";
 
 export type ContractInfo = {
   chain: "ethereum";
@@ -41,7 +41,6 @@ export class EVMListener extends Listener {
   private readonly _directoryNodeUrlPool: string[];
   private readonly _blockchainRid: string;
   private readonly _blockHeightIncrement: number;
-  private readonly _throttler: Throttler;
   
   private _currentBlockNumber: number;
   
@@ -54,7 +53,6 @@ export class EVMListener extends Listener {
     this._currentBlockNumber = -1;
     this._cache = createCache({ ttl: this.config["cacheTtlMs"] as number });
     // Get throttler instance specific to this chain
-    this._throttler = Throttler.getInstance(this._contractInfo.chain);
   }
   
   async run() {
@@ -69,8 +67,10 @@ export class EVMListener extends Listener {
 
     let startBlock = this._currentBlockNumber;
 
-    const currentBlockNumber = await this._throttler
-      .execute(() => ResultAsync.fromPromise(provider.getBlockNumber(), (error) => error));
+    const currentBlockNumber = await executeThrottled(
+      this._contractInfo.chain, 
+      () => provider.getBlockNumber()
+    );
 
     if (currentBlockNumber.isErr()) {
       logger.error(`Failed to get current block number`, this.logMetadata());
@@ -83,8 +83,9 @@ export class EVMListener extends Listener {
     const events: EventWrapper[] = [];
     for (const filter of this._contractInfo.filters) {
       const contractFilter = filter.filter(contract);
-      const foundEvents = await this._throttler.execute(() => 
-        ResultAsync.fromPromise(contract.queryFilter(contractFilter, startBlock, blockNumber), (error) => error)
+      const foundEvents = await executeThrottled<Log[] |EventLog[]>(
+        this._contractInfo.chain, 
+        () => contract.queryFilter(contractFilter, startBlock, blockNumber)
       );
 
       if (foundEvents.isErr()) {
