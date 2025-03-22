@@ -13,7 +13,7 @@ import { MocaStakeForwarder, type MocaStakeForwarderInput } from "../plugins/Moc
 import config from "../config";
 import { err, ok, Result } from "neverthrow";
 import { createCache, type Cache } from "cache-manager";
-import { secondsFromNow } from "../util/time";
+import { millisecondsFromNow, secondsFromNow } from "../util/time";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 
@@ -41,6 +41,7 @@ export class EVMListener extends Listener {
   private readonly _directoryNodeUrlPool: string[];
   private readonly _blockchainRid: string;
   private readonly _blockHeightIncrement: number;
+  private readonly _throttleOnSuccessMs: number;
   
   private _currentBlockNumber: number;
   
@@ -50,6 +51,7 @@ export class EVMListener extends Listener {
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
     this._blockchainRid = config.abstractionChain.blockchainRid;
     this._blockHeightIncrement = this.config["blockHeightIncrement"] as number;
+    this._throttleOnSuccessMs = this.config["throttleOnSuccessMs"] as number;
     this._currentBlockNumber = -1;
     this._cache = createCache({ ttl: this.config["cacheTtlMs"] as number });
     // Get throttler instance specific to this chain
@@ -120,7 +122,7 @@ export class EVMListener extends Listener {
 
     this._currentBlockNumber = blockNumber;
     logger.info(`Processed to block ${blockNumber}`, this.logMetadata());
-    return secondsFromNow(1);
+    return millisecondsFromNow(this._throttleOnSuccessMs);
   }
 
   private uniqueId(event: EventWrapper) {

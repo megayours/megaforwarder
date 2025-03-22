@@ -1,5 +1,9 @@
+export const millisecondsFromNow = (milliseconds: number) => {
+  return Date.now() + milliseconds;
+};
+
 export const secondsFromNow = (seconds: number) => {
-  return Date.now() + seconds * 1000;
+  return millisecondsFromNow(seconds * 1000);
 };
 
 export const minutesFromNow = (minutes: number) => {
