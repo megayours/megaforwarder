@@ -24,6 +24,45 @@ export const blockHeightGauge = new Gauge({
   registers: [register],
 });
 
+// Solana Balance Updater specific metrics
+export const solanaBalanceUpdateDuration = new Histogram({
+  name: 'solana_balance_update_duration_seconds',
+  help: 'Duration of Solana balance update operations',
+  labelNames: ['operation', 'status'],
+  buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60, 120],
+  registers: [register],
+});
+
+export const solanaTokenLookupErrors = new Counter({
+  name: 'solana_token_lookup_errors_total',
+  help: 'Total number of token lookup errors by type',
+  labelNames: ['error_type', 'token_mint'],
+  registers: [register],
+});
+
+export const solanaRpcLatency = new Histogram({
+  name: 'solana_rpc_latency_seconds',
+  help: 'Latency of Solana RPC calls',
+  labelNames: ['method', 'status'],
+  buckets: [0.05, 0.1, 0.5, 1, 2, 5, 10, 30],
+  registers: [register],
+});
+
+export const throttleQueueSize = new Gauge({
+  name: 'throttle_queue_size',
+  help: 'Current size of the Solana throttle queue',
+  labelNames: ['identifier'],
+  registers: [register],
+});
+
+export const throttleWaitTime = new Histogram({
+  name: 'throttle_wait_time_seconds',
+  help: 'Wait time for throttled operations',
+  labelNames: ['identifier', 'operation'],
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10],
+  registers: [register],
+});
+
 export const txProcessedTotal = new Counter({
   name: 'tx_processed_total',
   help: 'Total number of transactions processed',

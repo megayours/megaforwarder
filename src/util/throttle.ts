@@ -3,9 +3,11 @@ import pThrottle from "p-throttle";
 import type { ThrottledFunction } from "p-throttle";
 import { tryCatch } from "./try-catch";
 import type { OracleError } from "./errors";
+import { throttleQueueSize } from "./monitoring";
 
 class ThrottleManager {
   private throttlers = new Map<string, ThrottledFunction<any>>();
+  private queueSizes = new Map<string, number>();
 
   /**
    * Executes a function with rate limiting
@@ -20,11 +22,26 @@ class ThrottleManager {
         limit: maxCallsPerSecond,
         interval: 1000,
       }));
+      this.queueSizes.set(identifier, 0);
     }
+
+    // Update queue size metrics
+    const currentQueueSize = (this.queueSizes.get(identifier) || 0) + 1;
+    this.queueSizes.set(identifier, currentQueueSize);
+
+    // Track Solana-specific metrics
+    throttleQueueSize.set({ identifier }, currentQueueSize);
 
     const throttledFn = this.throttlers.get(identifier)!;
     const { data, error } = await tryCatch<T>(throttledFn(fn)());
-   
+
+    // Decrement queue size after execution
+    const newQueueSize = (this.queueSizes.get(identifier) || 1) - 1;
+    this.queueSizes.set(identifier, newQueueSize);
+
+    // Update Solana-specific metrics
+    throttleQueueSize.set({ identifier }, newQueueSize);
+
     if (error) {
       return err({ type: 'throttle_error', context: error?.message ?? 'Unknown error' });
     }
@@ -43,8 +60,8 @@ const throttleManager = new ThrottleManager();
  * @param maxCallsPerSecond Maximum calls per second (default: 3)
  */
 export const executeThrottled = async <T>(
-  identifier: string, 
-  fn: (...args: any[]) => Promise<T>, 
+  identifier: string,
+  fn: (...args: any[]) => Promise<T>,
   maxCallsPerSecond: number = 3
 ): Promise<ResultAsync<T, OracleError>> => {
   // Using arrow function to preserve the original context
