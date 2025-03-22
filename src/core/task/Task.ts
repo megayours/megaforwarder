@@ -4,7 +4,7 @@ import config from "../../config";
 import { requestPrepare, requestValidate } from "./client";
 import { PluginNotFound } from "../errors/PluginNotFound";
 import type { ProcessInput, ProtocolPrepareResult } from "../types/Protocol";
-import { logger } from "../../util/monitoring";
+import { completedTasksTotal, logger, taskDurationTotal } from "../../util/monitoring";
 import { tryCatch } from "../../util/try-catch";
 import { err, ok, Result } from "neverthrow";
 import type { OracleError } from "../../util/errors";
@@ -12,6 +12,7 @@ import type { OracleError } from "../../util/errors";
 export class Task<T> {
   private plugin: IPlugin<unknown, unknown, unknown, T>;
   private input: unknown;
+  private startTime: number;
 
   constructor(pluginId: string, input: unknown) {
     const plugin = PluginRegistry.getInstance().get(pluginId);
@@ -20,6 +21,7 @@ export class Task<T> {
     }
     this.plugin = plugin as IPlugin<unknown, unknown, unknown, T>;
     this.input = input;
+    this.startTime = Date.now();
   }
 
   private async runPreparePhase(): Promise<Result<{ publicKey: string; result: ProtocolPrepareResult<unknown> }[], OracleError>> {
@@ -166,6 +168,9 @@ export class Task<T> {
       logger.error(`Error during execute phase: ${executeResult.error.type} > ${executeResult.error.context}`);
       return err(executeResult.error);
     }
+    
+    completedTasksTotal.inc({ plugin_id: this.plugin.metadata.id });
+    taskDurationTotal.observe({ plugin_id: this.plugin.metadata.id }, Date.now() - this.startTime);
     return ok(true);
   }
 }

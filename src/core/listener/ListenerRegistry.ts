@@ -85,7 +85,7 @@ export class ListenerRegistry {
         }
         
         // Sleep a short time before checking again
-        await sleep(1000);
+        await sleep(100);
       }
     })();
   }

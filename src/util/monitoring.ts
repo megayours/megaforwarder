@@ -1,4 +1,4 @@
-import { collectDefaultMetrics, Counter, Gauge, Registry } from 'prom-client';
+import { collectDefaultMetrics, Counter, Gauge, Histogram, Registry } from 'prom-client';
 import winston from 'winston';
 import LokiTransport from 'winston-loki';
 import config from '../config';
@@ -35,6 +35,20 @@ export const rpcCallsTotal = new Counter({
   name: 'rpc_calls_total',
   help: 'Total number of RPC calls',
   labelNames: ['chain', 'chain_code', 'rpc_url'],
+  registers: [register],
+});
+
+export const completedTasksTotal = new Counter({
+  name: 'completed_tasks_total',
+  help: 'Total number of tasks completed',
+  labelNames: ['plugin_id'],
+  registers: [register],
+});
+
+export const taskDurationTotal = new Histogram({
+  name: 'task_duration_total',
+  help: 'Total duration of tasks',
+  labelNames: ['plugin_id'],
   registers: [register],
 });
 

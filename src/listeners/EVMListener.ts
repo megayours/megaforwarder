@@ -16,7 +16,7 @@ import { createCache, type Cache } from "cache-manager";
 import { millisecondsFromNow, secondsFromNow } from "../util/time";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
-
+import { EVM_THROTTLE_LIMIT } from "../util/constants";
 export type ContractInfo = {
   chain: "ethereum";
   contract: string;
@@ -71,7 +71,8 @@ export class EVMListener extends Listener {
 
     const currentBlockNumber = await executeThrottled(
       this._contractInfo.chain, 
-      () => provider.getBlockNumber()
+      () => provider.getBlockNumber(),
+      EVM_THROTTLE_LIMIT
     );
     rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract, rpc_url: rpcUrl });
     
@@ -88,7 +89,8 @@ export class EVMListener extends Listener {
       const contractFilter = filter.filter(contract);
       const foundEvents = await executeThrottled<Log[] |EventLog[]>(
         this._contractInfo.chain, 
-        () => contract.queryFilter(contractFilter, startBlock, blockNumber)
+        () => contract.queryFilter(contractFilter, startBlock, blockNumber),
+        EVM_THROTTLE_LIMIT
       );
       rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract, rpc_url: rpcUrl });
       if (foundEvents.isErr()) {

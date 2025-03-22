@@ -15,6 +15,7 @@ import { err, ok, ResultAsync, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import type { TransactionReceipt } from "ethers";
+import { EVM_THROTTLE_LIMIT } from "../util/constants";
 
 export type ERC721ForwarderInput = {
   chain: string;
@@ -62,7 +63,8 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     // Check that transaction exists
     const transaction = await executeThrottled<TransactionResponse | null>(
       rpcUrl,
-      () => provider.getTransaction(transactionHash)
+      () => provider.getTransaction(transactionHash),
+      EVM_THROTTLE_LIMIT
     );
     rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
     if (transaction.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
@@ -73,7 +75,8 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     // Get transaction receipt to access logs
     const receipt = await executeThrottled<null | TransactionReceipt>(
       rpcUrl,
-      () => provider.getTransactionReceipt(transactionHash)
+      () => provider.getTransactionReceipt(transactionHash),
+      EVM_THROTTLE_LIMIT
     );
     rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
     if (receipt.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
@@ -114,7 +117,8 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
 
       const tokenUriResult = await executeThrottled<string>(
         rpcUrl,
-        () => contract.tokenURI!(tokenId)
+        () => contract.tokenURI!(tokenId),
+        EVM_THROTTLE_LIMIT
       );
       rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
 

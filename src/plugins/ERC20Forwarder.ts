@@ -15,6 +15,7 @@ import type { OracleError } from "../util/errors";
 import { err, ok, Result, ResultAsync } from "neverthrow";
 import { executeThrottled } from "../util/throttle";
 import type { TransactionReceipt } from "ethers";
+import { EVM_THROTTLE_LIMIT } from "../util/constants";
 
 export type ERC20ForwarderInput = {
   chain: string;
@@ -61,7 +62,8 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     // Check that transaction exists
     const transaction = await executeThrottled<TransactionResponse | null>(
       rpcUrl,
-      () => provider.getTransaction(transactionHash)
+      () => provider.getTransaction(transactionHash),
+      EVM_THROTTLE_LIMIT
     );
     rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
     if (transaction.isErr()) {
@@ -76,7 +78,8 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     // Get transaction receipt to access logs
     const receipt = await executeThrottled<null | TransactionReceipt>(
       rpcUrl,
-      () => provider.getTransactionReceipt(transactionHash)
+      () => provider.getTransactionReceipt(transactionHash),
+      EVM_THROTTLE_LIMIT
     );
     rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
     if (receipt.isErr()) {
@@ -117,9 +120,9 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     if (isMint) {
       const contract = new ethers.Contract(contractAddress, erc20Abi, provider);
       const [decimals, name, symbol] = await Promise.all([
-        executeThrottled<number>(rpcUrl, () => contract.decimals!()),
-        executeThrottled<string>(rpcUrl, () => contract.name!()),
-        executeThrottled<string>(rpcUrl, () => contract.symbol!())
+        executeThrottled<number>(rpcUrl, () => contract.decimals!(), EVM_THROTTLE_LIMIT),
+        executeThrottled<string>(rpcUrl, () => contract.name!(), EVM_THROTTLE_LIMIT),
+        executeThrottled<string>(rpcUrl, () => contract.symbol!(), EVM_THROTTLE_LIMIT)
       ]);
       rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 3);
 

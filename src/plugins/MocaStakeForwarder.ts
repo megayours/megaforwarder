@@ -16,6 +16,7 @@ import { err, ok, Result, ResultAsync } from "neverthrow";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import type { TransactionReceipt } from "ethers";
+import { EVM_THROTTLE_LIMIT } from "../util/constants";
 
 export type MocaStakeForwarderInput = {
   chain: string;
@@ -59,7 +60,8 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     // Check that transaction exists
     const transaction = await executeThrottled<TransactionResponse | null>(
       rpcUrl,
-      () => provider.getTransaction(transactionHash)
+      () => provider.getTransaction(transactionHash),
+      EVM_THROTTLE_LIMIT
     );
     rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
     if (transaction.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
@@ -70,7 +72,8 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     // Get transaction receipt to access logs
     const receipt = await executeThrottled<TransactionReceipt | null>(
       rpcUrl,
-      () => provider.getTransactionReceipt(transactionHash)
+      () => provider.getTransactionReceipt(transactionHash),
+      EVM_THROTTLE_LIMIT
     );
     rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
     if (receipt.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
