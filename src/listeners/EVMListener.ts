@@ -80,10 +80,8 @@ export class EVMListener extends Listener {
       return secondsFromNow(15);
     }
 
-    blockHeightGauge.set({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract }, currentBlockNumber.value);
-
     const blockNumber = Math.min(startBlock + this._blockHeightIncrement, currentBlockNumber.value);
-    logger.info(`Fetching events from block ${startBlock} to ${blockNumber}`, this.logMetadata());
+    logger.debug(`Fetching events from block ${startBlock} to ${blockNumber}`, this.logMetadata());
 
     const events: EventWrapper[] = [];
     for (const filter of this._contractInfo.filters) {
@@ -101,7 +99,7 @@ export class EVMListener extends Listener {
       events.push(...foundEvents.value.map(event => ({ name: filter.name, event })));
     }
 
-    logger.info(`Found ${events.length} events`, this.logMetadata());
+    logger.info(`Found ${events.length} events in range ${startBlock} to ${blockNumber}`, this.logMetadata());
 
     for (const event of this.sortEvents(events)) {
       const cachedSuccess = await this._cache.get(this.uniqueId(event));
@@ -123,8 +121,10 @@ export class EVMListener extends Listener {
       this._cache.set(this.uniqueId(event), result);
     }
 
+    blockHeightGauge.set({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract }, blockNumber);
+
     this._currentBlockNumber = blockNumber;
-    logger.info(`Processed to block ${blockNumber}`, this.logMetadata());
+    logger.debug(`Processed to block ${blockNumber}`, this.logMetadata());
     return millisecondsFromNow(this._throttleOnSuccessMs);
   }
 
