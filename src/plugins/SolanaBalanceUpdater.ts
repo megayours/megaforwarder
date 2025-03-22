@@ -9,6 +9,7 @@ import { getAccount, getAssociatedTokenAddress, type Account } from "@solana/spl
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
+import { SOLANA_THROTTLE_LIMIT } from "../util/constants";
 
 type SolanaBalanceUpdaterInput = {
   tokenMint: string;
@@ -63,7 +64,8 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
           mintPubkey,
           userPubkey,
           true // Allow owner off curve
-        )
+        ),
+      SOLANA_THROTTLE_LIMIT
     );
 
     if (tokenAddress.isErr()) {
@@ -80,7 +82,8 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     try {
       const tokenAccounts = await executeThrottled<RpcResponseAndContext<{ pubkey: PublicKey; account: AccountInfo<ParsedAccountData>; }[]>>(
         "solana",
-        () => this._connection.getParsedTokenAccountsByOwner(userPubkey, { mint: mintPubkey })
+        () => this._connection.getParsedTokenAccountsByOwner(userPubkey, { mint: mintPubkey }),
+        SOLANA_THROTTLE_LIMIT
       );
 
       if (tokenAccounts.isOk() && tokenAccounts.value.value.length > 0) {
@@ -98,7 +101,8 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
         // Fallback to the ATA method
         const tokenAccountResult = await executeThrottled<Account>(
           "solana",
-          () => getAccount(this._connection, tokenAddress.value)
+          () => getAccount(this._connection, tokenAddress.value),
+          SOLANA_THROTTLE_LIMIT
         );
 
         if (tokenAccountResult.isOk()) {

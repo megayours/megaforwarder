@@ -9,6 +9,7 @@ import { createClient } from "postchain-client";
 import config from "../config";
 import { minutesFromNow, secondsFromNow } from "../util/time";
 import { executeThrottled } from "../util/throttle";
+import { SOLANA_THROTTLE_LIMIT } from "../util/constants";
 
 const BLOCK_HEIGHT_INCREMENT = 100;
 
@@ -66,7 +67,8 @@ export class SolanaListener extends Listener implements IListener {
   async run(): Promise<number> {
     const previousIndexedSlot = await executeThrottled<number>(
       "solana", 
-      () => this.getSlot()
+      () => this.getSlot(),
+      SOLANA_THROTTLE_LIMIT
     );
 
     if (previousIndexedSlot.isErr()) {
@@ -89,7 +91,7 @@ export class SolanaListener extends Listener implements IListener {
         throw new Error('Program public key not initialized');
       }
 
-      const currentSlot = await executeThrottled<number>("solana", () => connection.getSlot());
+      const currentSlot = await executeThrottled<number>("solana", () => connection.getSlot(), SOLANA_THROTTLE_LIMIT);
 
       if (currentSlot.isErr()) {
         logger.error(`Failed to get slot`);
@@ -105,7 +107,7 @@ export class SolanaListener extends Listener implements IListener {
           limit: BLOCK_HEIGHT_INCREMENT,
         },
         'confirmed'
-      ));
+      ), SOLANA_THROTTLE_LIMIT);
 
       if (signaturesResult.isErr() || !signaturesResult.value) {
         logger.error(`Failed to get signatures`);
@@ -143,7 +145,7 @@ export class SolanaListener extends Listener implements IListener {
         // Get the full transaction details
         const tx = await executeThrottled<VersionedTransactionResponse | null>(this._rpcUrl, () => connection.getTransaction(sig.signature, {
           maxSupportedTransactionVersion: 0
-        }));
+        }), SOLANA_THROTTLE_LIMIT);
 
         if (tx.isErr()) {
           logger.error(`Failed to get transaction`);

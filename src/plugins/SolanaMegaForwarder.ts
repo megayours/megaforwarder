@@ -8,6 +8,7 @@ import { logger } from "../util/monitoring";
 import { err, ok, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
+import { SOLANA_THROTTLE_LIMIT } from "../util/constants";
 
 type SolanaMegaForwarderInput = {
   txSignature: string;
@@ -78,7 +79,8 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
       () => this._connection.getTransaction(input.txSignature, {
         commitment: "confirmed",
         maxSupportedTransactionVersion: 0,
-      })
+      }),
+      SOLANA_THROTTLE_LIMIT
     );
 
     if (transaction.isErr()) {
