@@ -96,6 +96,8 @@ export class EVMListener extends Listener {
       events.push(...foundEvents.value.map(event => ({ name: filter.name, event })));
     }
 
+    logger.info(`Found ${events.length} events`, this.logMetadata());
+
     for (const event of this.sortEvents(events)) {
       const cachedSuccess = await this._cache.get(this.uniqueId(event));
       if (cachedSuccess) {
@@ -118,7 +120,7 @@ export class EVMListener extends Listener {
 
     this._currentBlockNumber = blockNumber;
     logger.info(`Processed to block ${blockNumber}`, this.logMetadata());
-    return secondsFromNow(10);
+    return secondsFromNow(1);
   }
 
   private uniqueId(event: EventWrapper) {
