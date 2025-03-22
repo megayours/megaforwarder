@@ -65,7 +65,7 @@ export class SolanaListener extends Listener implements IListener {
 
   async run(): Promise<number> {
     const previousIndexedSlot = await executeThrottled<number>(
-      this._rpcUrl, 
+      "solana", 
       () => this.getSlot()
     );
 
@@ -89,7 +89,7 @@ export class SolanaListener extends Listener implements IListener {
         throw new Error('Program public key not initialized');
       }
 
-      const currentSlot = await executeThrottled<number>(this._rpcUrl, () => connection.getSlot());
+      const currentSlot = await executeThrottled<number>("solana", () => connection.getSlot());
 
       if (currentSlot.isErr()) {
         logger.error(`Failed to get slot`);
@@ -98,7 +98,7 @@ export class SolanaListener extends Listener implements IListener {
       
 
       // Get all signatures for the program
-      let signaturesResult = await executeThrottled<ConfirmedSignatureInfo[]>(this._rpcUrl, () => connection.getSignaturesForAddress(
+      let signaturesResult = await executeThrottled<ConfirmedSignatureInfo[]>("solana", () => connection.getSignaturesForAddress(
         this._programPubkey!,
         {
           minContextSlot: this._currentBlockHeight,
