@@ -16,7 +16,6 @@ const BLOCK_HEIGHT_INCREMENT = 100;
 export class SolanaListener extends Listener implements IListener {
   private readonly _programId: string;
   private readonly _cache: Cache;
-  private readonly _rpcUrl: string;
   private readonly _blockchainRid: string;
   private readonly _directoryNodeUrlPool: string[];
   private _currentBlockHeight: number = -1;
@@ -31,7 +30,6 @@ export class SolanaListener extends Listener implements IListener {
     const solanaRpcUrl = config.rpc["solana_devnet"]?.[0];
     if (!solanaRpcUrl) throw new Error("No Solana RPC URL found");
 
-    this._rpcUrl = solanaRpcUrl;
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
     this._blockchainRid = config.abstractionChain.blockchainRid;
   }
@@ -65,12 +63,13 @@ export class SolanaListener extends Listener implements IListener {
   }
 
   async run(): Promise<number> {
+    const rpcUrl = this.getRpcUrl();
     const previousIndexedSlot = await executeThrottled<number>(
       "solana", 
       () => this.getSlot(),
       SOLANA_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: this._rpcUrl });
+    rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: rpcUrl });
     if (previousIndexedSlot.isErr()) {
       logger.error(`Failed to get slot`);
       return secondsFromNow(60);
@@ -80,7 +79,7 @@ export class SolanaListener extends Listener implements IListener {
       this._currentBlockHeight = previousIndexedSlot.value;
     }
 
-    const connection = new Connection(this._rpcUrl);
+    const connection = new Connection(rpcUrl);
     try {
       // Validate program ID if not already validated
       if (!this._programPubkey && !this.validateAndSetProgramId()) {
@@ -92,7 +91,7 @@ export class SolanaListener extends Listener implements IListener {
       }
 
       const currentSlot = await executeThrottled<number>("solana", () => connection.getSlot(), SOLANA_THROTTLE_LIMIT);
-      rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: this._rpcUrl });
+      rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: rpcUrl });
       if (currentSlot.isErr()) {
         logger.error(`Failed to get slot`);
         return secondsFromNow(60);
@@ -109,7 +108,7 @@ export class SolanaListener extends Listener implements IListener {
         'confirmed'
       ), SOLANA_THROTTLE_LIMIT);
 
-      rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: this._rpcUrl });
+      rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: rpcUrl });
       
       if (signaturesResult.isErr() || !signaturesResult.value) {
         logger.error(`Failed to get signatures`);
@@ -145,10 +144,10 @@ export class SolanaListener extends Listener implements IListener {
         logger.debug(`Cached ${sig.signature}`);
 
         // Get the full transaction details
-        const tx = await executeThrottled<VersionedTransactionResponse | null>(this._rpcUrl, () => connection.getTransaction(sig.signature, {
+        const tx = await executeThrottled<VersionedTransactionResponse | null>(rpcUrl, () => connection.getTransaction(sig.signature, {
           maxSupportedTransactionVersion: 0
         }), SOLANA_THROTTLE_LIMIT);
-        rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: this._rpcUrl });
+        rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: rpcUrl });
         
         if (tx.isErr()) {
           logger.error(`Failed to get transaction`);
@@ -178,5 +177,16 @@ export class SolanaListener extends Listener implements IListener {
       console.error('Error in Solana listener:', error);
       return secondsFromNow(5);
     }
+  }
+
+  private getRpcUrl() {
+    const rpcs = config.rpc["solana_devnet"];
+    if (!rpcs) throw new Error(`No RPC URL found for chain solana_devnet`);
+
+    const rpcUrl = rpcs?.[Math.floor(Math.random() * rpcs.length)];
+    if (!rpcUrl) throw new Error(`No RPC URL found for chain solana_devnet`);
+
+    logger.debug(`Selected RPC URL: ${rpcUrl}`);
+    return rpcUrl;
   }
 }

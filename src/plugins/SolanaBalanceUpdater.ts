@@ -36,17 +36,12 @@ type SolanaBalanceUpdaterOutput = {
 
 export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, BalanceUpdateEvent, GTX, SolanaBalanceUpdaterOutput> {
   static readonly pluginId = "solana-balance-updater";
-  private readonly _connection: Connection;
   private readonly _directoryNodeUrlPool: string[];
   private readonly _megaYoursBlockchainRid: Buffer;
 
   constructor() {
     super({ id: SolanaBalanceUpdater.pluginId });
 
-    const solanaRpcUrl = config.rpc["solana"]?.[0];
-    if (!solanaRpcUrl) throw new Error("No Solana RPC URL found");
-
-    this._connection = new Connection(solanaRpcUrl);
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
     this._megaYoursBlockchainRid = Buffer.from(config.abstractionChain.blockchainRid, "hex");
   }
@@ -59,6 +54,10 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
       decimals: input.decimals,
       userAccount: input.userAccount
     });
+
+    const solanaRpcUrl = this.getRpcUrl();
+
+    const connection = new Connection(solanaRpcUrl);
 
     // Convert string addresses to PublicKeys
     const mintPubkey = new PublicKey(input.tokenMint);
@@ -98,13 +97,13 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
       const throttleStart = Date.now();
       const tokenAccounts = await executeThrottled<RpcResponseAndContext<{ pubkey: PublicKey; account: AccountInfo<ParsedAccountData>; }[]>>(
         "solana",
-        () => this._connection.getParsedTokenAccountsByOwner(userPubkey, { mint: mintPubkey }),
+        () => connection.getParsedTokenAccountsByOwner(userPubkey, { mint: mintPubkey }),
         SOLANA_THROTTLE_LIMIT
       );
       throttleWaitTime.observe({ identifier: 'solana', operation: 'getParsedTokenAccountsByOwner' }, (Date.now() - throttleStart) / 1000);
       rpcTimer({ status: tokenAccounts.isOk() ? 'success' : 'error' });
       
-      rpcCallsTotal.inc({ chain: "solana", chain_code: input.tokenMint, rpc_url: this._connection.rpcEndpoint }, 1);
+      rpcCallsTotal.inc({ chain: "solana", chain_code: input.tokenMint, rpc_url: solanaRpcUrl }, 1);
       if (tokenAccounts.isOk() && tokenAccounts.value.value.length > 0) {
         const accountInfo = tokenAccounts.value.value[0];
         if (accountInfo && accountInfo.account.data.parsed.info) {
@@ -124,13 +123,13 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
         const ataThrottleStart = Date.now();
         const tokenAccountResult = await executeThrottled<Account>(
           "solana",
-          () => getAccount(this._connection, tokenAddress.value),
+          () => getAccount(connection, tokenAddress.value),
           SOLANA_THROTTLE_LIMIT
         );
         throttleWaitTime.observe({ identifier: 'solana', operation: 'getAccount' }, (Date.now() - ataThrottleStart) / 1000);
         ataRpcTimer({ status: tokenAccountResult.isOk() ? 'success' : 'error' });
         
-        rpcCallsTotal.inc({ chain: "solana", chain_code: input.tokenMint, rpc_url: this._connection.rpcEndpoint }, 1);
+        rpcCallsTotal.inc({ chain: "solana", chain_code: input.tokenMint, rpc_url: solanaRpcUrl }, 1);
         if (tokenAccountResult.isOk()) {
           balance = tokenAccountResult.value.amount.toString();
           logger.debug(`Retrieved token balance from getAccount: ${balance}`);
@@ -229,5 +228,16 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     return ok({
       message: "Balance update forwarded successfully"
     });
+  }
+
+  private getRpcUrl() {
+    const rpcs = config.rpc["solana"];
+    if (!rpcs) throw new Error(`No RPC URL found for chain solana`);
+
+    const rpcUrl = rpcs?.[Math.floor(Math.random() * rpcs.length)];
+    if (!rpcUrl) throw new Error(`No RPC URL found for chain solana`);
+
+    logger.debug(`Selected RPC URL: ${rpcUrl}`);
+    return rpcUrl;
   }
 } 
