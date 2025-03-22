@@ -4,7 +4,7 @@ import { Task } from "../core/task/Task";
 import { Connection, PublicKey, type ConfirmedSignatureInfo, type VersionedTransactionResponse } from "@solana/web3.js";
 import { Listener } from "../core/listener/Listener";
 import { SolanaMegaForwarder } from "../plugins/SolanaMegaForwarder";
-import { logger } from "../util/monitoring";
+import { logger, rpcCallsTotal } from "../util/monitoring";
 import { createClient } from "postchain-client";
 import config from "../config";
 import { minutesFromNow, secondsFromNow } from "../util/time";
@@ -70,7 +70,7 @@ export class SolanaListener extends Listener implements IListener {
       () => this.getSlot(),
       SOLANA_THROTTLE_LIMIT
     );
-
+    rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: this._rpcUrl });
     if (previousIndexedSlot.isErr()) {
       logger.error(`Failed to get slot`);
       return secondsFromNow(60);
@@ -92,7 +92,7 @@ export class SolanaListener extends Listener implements IListener {
       }
 
       const currentSlot = await executeThrottled<number>("solana", () => connection.getSlot(), SOLANA_THROTTLE_LIMIT);
-
+      rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: this._rpcUrl });
       if (currentSlot.isErr()) {
         logger.error(`Failed to get slot`);
         return secondsFromNow(60);
@@ -109,6 +109,8 @@ export class SolanaListener extends Listener implements IListener {
         'confirmed'
       ), SOLANA_THROTTLE_LIMIT);
 
+      rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: this._rpcUrl });
+      
       if (signaturesResult.isErr() || !signaturesResult.value) {
         logger.error(`Failed to get signatures`);
         return secondsFromNow(60);
@@ -146,7 +148,8 @@ export class SolanaListener extends Listener implements IListener {
         const tx = await executeThrottled<VersionedTransactionResponse | null>(this._rpcUrl, () => connection.getTransaction(sig.signature, {
           maxSupportedTransactionVersion: 0
         }), SOLANA_THROTTLE_LIMIT);
-
+        rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: this._rpcUrl });
+        
         if (tx.isErr()) {
           logger.error(`Failed to get transaction`);
           return secondsFromNow(60);

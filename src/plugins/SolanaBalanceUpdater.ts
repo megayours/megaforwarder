@@ -1,12 +1,12 @@
 import { Plugin } from "../core/plugin/Plugin";
 import type { ProcessInput } from "../core/types/Protocol";
-import { logger } from "../util/monitoring";
+import { logger, rpcCallsTotal, txProcessedTotal } from "../util/monitoring";
 import config from "../config";
 import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import { ecdsaSign } from "secp256k1";
 import { Connection, PublicKey, type AccountInfo, type ParsedAccountData, type RpcResponseAndContext } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddress, type Account } from "@solana/spl-token";
-import { err, ok, ResultAsync, type Result } from "neverthrow";
+import { err, ok, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import { SOLANA_THROTTLE_LIMIT } from "../util/constants";
@@ -67,7 +67,6 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
         ),
       SOLANA_THROTTLE_LIMIT
     );
-
     if (tokenAddress.isErr()) {
       return err({ type: "permanent_error", context: `Error getting associated token address: ${tokenAddress.error}` });
     }
@@ -85,7 +84,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
         () => this._connection.getParsedTokenAccountsByOwner(userPubkey, { mint: mintPubkey }),
         SOLANA_THROTTLE_LIMIT
       );
-
+      rpcCallsTotal.inc({ chain: "solana", chain_code: input.tokenMint, rpc_url: this._connection.rpcEndpoint }, 1);
       if (tokenAccounts.isOk() && tokenAccounts.value.value.length > 0) {
         const accountInfo = tokenAccounts.value.value[0];
         if (accountInfo && accountInfo.account.data.parsed.info) {
@@ -104,7 +103,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
           () => getAccount(this._connection, tokenAddress.value),
           SOLANA_THROTTLE_LIMIT
         );
-
+        rpcCallsTotal.inc({ chain: "solana", chain_code: input.tokenMint, rpc_url: this._connection.rpcEndpoint }, 1);
         if (tokenAccountResult.isOk()) {
           balance = tokenAccountResult.value.amount.toString();
           logger.debug(`Retrieved token balance from getAccount: ${balance}`);
@@ -169,6 +168,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     try {
       await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.Dapp);
       logger.info(`Balance update forwarded successfully`);
+      txProcessedTotal.inc({ type: "solana_balance_update" });
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
       if (error.status === 409) {

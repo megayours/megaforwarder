@@ -4,7 +4,7 @@ import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gt
 import config from "../config";
 import { ecdsaSign } from "secp256k1";
 import { Plugin } from "../core/plugin/Plugin";
-import { logger } from "../util/monitoring";
+import { logger, rpcCallsTotal, txProcessedTotal } from "../util/monitoring";
 import { err, ok, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
@@ -82,6 +82,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
       }),
       SOLANA_THROTTLE_LIMIT
     );
+    rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: this._connection.rpcEndpoint }, 1);
 
     if (transaction.isErr()) {
       return err({ type: "prepare_error", context: `Transaction not found` });
@@ -162,6 +163,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
     try {
       await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.Dapp);
       logger.info(`Executed successfully`);
+      txProcessedTotal.inc({ type: "solana_mega_forwarder" });
     } catch (error: any) {
       if (error.status >= 400 && error.status < 500) {
         logger.info(`Transaction already in database, considering as success`);

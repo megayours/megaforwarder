@@ -1,4 +1,4 @@
-import { collectDefaultMetrics, Registry } from 'prom-client';
+import { collectDefaultMetrics, Counter, Gauge, Registry } from 'prom-client';
 import winston from 'winston';
 import LokiTransport from 'winston-loki';
 import config from '../config';
@@ -16,6 +16,27 @@ register.setDefaultLabels({
 
 // Enable default metrics collection
 collectDefaultMetrics({ register });
+
+export const blockHeightGauge = new Gauge({
+  name: 'latest_block_height',
+  help: 'Latest processed block height per chain and contract',
+  labelNames: ['chain', 'chain_code'],
+  registers: [register],
+});
+
+export const txProcessedTotal = new Counter({
+  name: 'tx_processed_total',
+  help: 'Total number of transactions processed',
+  labelNames: ['type'],
+  registers: [register],
+});
+
+export const rpcCallsTotal = new Counter({
+  name: 'rpc_calls_total',
+  help: 'Total number of RPC calls',
+  labelNames: ['chain', 'chain_code', 'rpc_url'],
+  registers: [register],
+});
 
 // Create Winston logger with Loki transport
 export const logger = winston.createLogger({

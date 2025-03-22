@@ -3,7 +3,7 @@ import { Plugin } from "../core/plugin/Plugin";
 import type { EventLog } from "ethers";
 import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import type { ProcessInput } from "../core/types/Protocol";
-import { logger } from "../util/monitoring";
+import { logger, rpcCallsTotal, txProcessedTotal } from "../util/monitoring";
 import { JsonRpcProvider } from "ethers/providers";
 import { dataSlice, ethers, Transaction } from "ethers";
 import { getAddress } from "ethers/address";
@@ -63,6 +63,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
       rpcUrl,
       () => provider.getTransaction(transactionHash)
     );
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
     if (transaction.isErr()) {
       return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
     }
@@ -77,6 +78,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
       rpcUrl,
       () => provider.getTransactionReceipt(transactionHash)
     );
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
     if (receipt.isErr()) {
       return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
     }
@@ -119,6 +121,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
         executeThrottled<string>(rpcUrl, () => contract.name!()),
         executeThrottled<string>(rpcUrl, () => contract.symbol!())
       ]);
+      rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 3);
 
       if (decimals.isErr()) return err({ type: "prepare_error", context: `Failed to get decimals` });
       if (name.isErr()) return err({ type: "prepare_error", context: `Failed to get name` });
@@ -234,6 +237,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
 
     try {
       await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.Dapp);
+      txProcessedTotal.inc({ type: "erc20" });
       logger.info(`Executed successfully`);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)

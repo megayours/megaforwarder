@@ -3,7 +3,7 @@ import { Plugin } from "../core/plugin/Plugin";
 import type { EventLog } from "ethers";
 import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import type { ProcessInput } from "../core/types/Protocol";
-import { logger } from "../util/monitoring";
+import { logger, rpcCallsTotal, txProcessedTotal } from "../util/monitoring";
 import { JsonRpcProvider } from "ethers/providers";
 import { Contract, dataSlice, ethers } from "ethers";
 import { getAddress } from "ethers/address";
@@ -64,6 +64,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       rpcUrl,
       () => provider.getTransaction(transactionHash)
     );
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
     if (transaction.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
 
     // Verify transaction was included in a block
@@ -74,6 +75,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       rpcUrl,
       () => provider.getTransactionReceipt(transactionHash)
     );
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
     if (receipt.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
 
     // Verify that the transaction was successful
@@ -114,6 +116,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
         rpcUrl,
         () => contract.tokenURI!(tokenId)
       );
+      rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
 
       if (tokenUriResult.isErr()) {
         return err({ type: "prepare_error", context: `Failed to get token URI` });
@@ -241,6 +244,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     try {
       await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.Dapp);
       logger.info(`Executed successfully`);
+      txProcessedTotal.inc({ type: "erc721" });
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
       if (error.status === 409) {

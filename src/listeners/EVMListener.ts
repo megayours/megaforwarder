@@ -1,7 +1,7 @@
 import { Contract, JsonRpcProvider } from "ethers";
 import type { ContractEventName, InterfaceAbi } from "ethers";
 import { Listener } from "../core/listener/Listener";
-import { logger } from "../util/monitoring";
+import { blockHeightGauge, logger, rpcCallsTotal } from "../util/monitoring";
 import { createClient } from "postchain-client";
 import { hexToBuffer } from "../util/hex";
 import type { Log } from "ethers";
@@ -73,11 +73,14 @@ export class EVMListener extends Listener {
       this._contractInfo.chain, 
       () => provider.getBlockNumber()
     );
-
+    rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract, rpc_url: rpcUrl });
+    
     if (currentBlockNumber.isErr()) {
       logger.error(`Failed to get current block number`, this.logMetadata());
       return secondsFromNow(15);
     }
+
+    blockHeightGauge.set({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract }, currentBlockNumber.value);
 
     const blockNumber = Math.min(startBlock + this._blockHeightIncrement, currentBlockNumber.value);
     logger.info(`Fetching events from block ${startBlock} to ${blockNumber}`, this.logMetadata());
@@ -89,7 +92,7 @@ export class EVMListener extends Listener {
         this._contractInfo.chain, 
         () => contract.queryFilter(contractFilter, startBlock, blockNumber)
       );
-
+      rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract, rpc_url: rpcUrl });
       if (foundEvents.isErr()) {
         logger.error(`Failed to get events`, this.logMetadata());
         return secondsFromNow(30);
