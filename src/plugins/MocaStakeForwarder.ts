@@ -195,7 +195,10 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     for (const event of selectedInput.data) {
       const eventId = `${event.transactionHash}-${event.logIndex}-${i++}`;
 
-      logger.info(`Checking if event ${eventId} is already processed`);
+      logger.info(`Checking if event ${eventId} is already processed`, {
+        contract: event.contractAddress,
+        event_id: eventId
+      });
       
       const alreadyProcessed = await ResultAsync.fromPromise(client.query('evm.is_event_processed', {
         contract: hexToBuffer(event.contractAddress),
@@ -203,16 +206,26 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
       }), (error) => error);
       
       if (alreadyProcessed.isErr()) {
-        logger.error(`Failed to check if event ${eventId} is already processed`, alreadyProcessed.error);
+        logger.error(`Failed to check if event ${eventId} is already processed`, {
+          contract: event.contractAddress,
+          event_id: eventId,
+          error: alreadyProcessed.error
+        });
         return err({ type: "process_error", context: `Failed to check if event is already processed` });
       }
 
       if (alreadyProcessed.value) {
-        logger.info(`Event ${eventId} already processed, skipping`);
+        logger.info(`Event ${eventId} already processed, skipping`, {
+          contract: event.contractAddress,
+          event_id: eventId
+        });
         continue
       }
 
-      logger.info(`Event ${eventId} not processed: ${alreadyProcessed.value}, processing`);
+      logger.info(`Event ${eventId} not processed: ${alreadyProcessed.value}, processing`, {
+        contract: event.contractAddress,
+        event_id: eventId
+      });
 
       if (event.type === "staked" || event.type === "staked_behalf") {
         tx = gtx.addTransactionToGtx('evm.erc20.mint', [
