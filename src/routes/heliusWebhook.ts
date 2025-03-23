@@ -4,6 +4,7 @@ import { Task } from "../core/task/Task";
 import { SolanaBalanceUpdater } from "../plugins/SolanaBalanceUpdater";
 import { logger } from "../util/monitoring";
 import type { OracleError } from "../util/errors";
+import { createCache } from "cache-manager";
 
 type RawTokenAmount = {
   decimals: number;
@@ -27,6 +28,11 @@ type TransferData = {
   accountData: AccountData[];
 }
 
+const cache = createCache({
+  ttl: 1000 * 60 * 60 * 24,
+  nonBlocking: false,
+});
+
 const heliusWebhook = async (req: Request) => {
   const transferData = await req.json() as TransferData[];
 
@@ -47,6 +53,15 @@ const heliusWebhook = async (req: Request) => {
   logger.info(`Found ${tokenTransfers.length} token transfers`, { tokenTransfers });
 
   for (const tokenTransfer of tokenTransfers) {
+    const cacheKey = `solana_balance_updater_${tokenTransfer.userAccount}`;
+    const cachedResult = await cache.get(cacheKey);
+    if (cachedResult) {
+      logger.debug(`Using cached result for ${tokenTransfer.userAccount}`);
+      continue;
+    }
+
+    await cache.set(cacheKey, true);
+
     const task = Result.fromThrowable(
       () => new Task(SolanaBalanceUpdater.pluginId, {
         tokenMint: tokenTransfer.mint,
