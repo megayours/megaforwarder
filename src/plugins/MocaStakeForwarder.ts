@@ -195,18 +195,24 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
     for (const event of selectedInput.data) {
       const eventId = `${event.transactionHash}-${event.logIndex}-${i++}`;
 
+      logger.info(`Checking if event ${eventId} is already processed`);
+      
       const alreadyProcessed = await ResultAsync.fromPromise(client.query('evm.is_event_processed', {
-        contract: Buffer.from(event.contractAddress.replace('0x', ''), 'hex'),
+        contract: hexToBuffer(event.contractAddress),
         event_id: eventId
       }), (error) => error);
       
       if (alreadyProcessed.isErr()) {
+        logger.error(`Failed to check if event ${eventId} is already processed`, alreadyProcessed.error);
         return err({ type: "process_error", context: `Failed to check if event is already processed` });
       }
 
       if (alreadyProcessed.value) {
+        logger.info(`Event ${eventId} already processed, skipping`);
         continue
       }
+
+      logger.info(`Event ${eventId} not processed: ${alreadyProcessed.value}, processing`);
 
       if (event.type === "staked" || event.type === "staked_behalf") {
         tx = gtx.addTransactionToGtx('evm.erc20.mint', [
