@@ -8,7 +8,9 @@ services:
     volumes:
       - ./config/config1.prod.yml:/usr/src/app/config/config.yml
     environment:
+      ENVIRONMENT: testnet
       CONFIG_FILE: /usr/src/app/config/config.yml
+      LOKI_URL: http://142.132.178.185:3100
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -39,7 +41,9 @@ services:
     volumes:
       - ./config/config2.prod.yml:/usr/src/app/config/config.yml
     environment:
+      ENVIRONMENT: testnet
       CONFIG_FILE: /usr/src/app/config/config.yml
+      LOKI_URL: http://142.132.178.185:3100
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -70,7 +74,9 @@ services:
     volumes:
       - ./config/config3.prod.yml:/usr/src/app/config/config.yml
     environment:
+      ENVIRONMENT: testnet
       CONFIG_FILE: /usr/src/app/config/config.yml
+      LOKI_URL: http://142.132.178.185:3100
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
