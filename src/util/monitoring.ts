@@ -73,7 +73,7 @@ export const txProcessedTotal = new Counter({
 export const rpcCallsTotal = new Counter({
   name: 'rpc_calls_total',
   help: 'Total number of RPC calls',
-  labelNames: ['chain', 'chain_code', 'rpc_url'],
+  labelNames: ['chain', 'chain_code', 'token'],
   registers: [register],
 });
 

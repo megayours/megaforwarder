@@ -4,7 +4,6 @@ import type { EventLog } from "ethers";
 import { ChainConfirmationLevel, createClient, getDigestToSignFromRawGtxBody, gtx, type GTX, type RawGtxBody } from "postchain-client";
 import type { ProcessInput } from "../core/types/Protocol";
 import { logger, rpcCallsTotal, txProcessedTotal } from "../util/monitoring";
-import { JsonRpcProvider } from "ethers/providers";
 import { dataSlice, ethers } from "ethers";
 import { getAddress } from "ethers/address";
 import { ecdsaSign } from "secp256k1";
@@ -50,7 +49,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
   }
 
   async prepare(input: MocaStakeForwarderInput): Promise<Result<StakingEvent[], OracleError>> {
-    const provider = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
+    const { provider, token } = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;
@@ -64,7 +63,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
       () => provider.getTransaction(transactionHash),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
     if (transaction.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
 
     // Verify transaction was included in a block
@@ -76,7 +75,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
       () => provider.getTransactionReceipt(transactionHash),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
     if (receipt.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
 
     // Verify that the transaction was successful

@@ -12,13 +12,13 @@ export const createRandomProvider = (rpcs: Rpc[]) => {
   const type = randomRpc.type;
 
   if (type === "alchemy") {
-    return new AlchemyProvider(chain, apiKey);
+    return { provider: new AlchemyProvider(chain, apiKey), token: apiKey };
   } else if (type === "infura") {
-    return new InfuraProvider(chain, apiKey);
+    return { provider: new InfuraProvider(chain, apiKey), token: apiKey };
   } else if (type === "quicknode" || type === "quiknode") {
-    return new QuickNodeProvider(chain, apiKey);
+    return { provider: new QuickNodeProvider(chain, apiKey), token: apiKey };
   } else if (type === "ankr") {
-    return new AnkrProvider(chain, apiKey);
+    return { provider: new AnkrProvider(chain, apiKey), token: apiKey };
   }
 
   throw new Error(`Unsupported RPC type: ${type}`);

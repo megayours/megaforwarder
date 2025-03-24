@@ -52,7 +52,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
 
   async prepare(input: ERC721ForwarderInput): Promise<Result<ERC721Event, OracleError>> {
     const timestamp = Date.now();
-    const provider = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
+    const { provider, token } = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;
@@ -66,7 +66,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       () => provider.getTransaction(transactionHash),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
     if (transaction.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
 
     // Verify transaction was included in a block
@@ -78,7 +78,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       () => provider.getTransactionReceipt(transactionHash),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
     if (receipt.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
 
     // Verify that the transaction was successful
@@ -120,7 +120,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
         () => contract.tokenURI!(tokenId),
         EVM_THROTTLE_LIMIT
       );
-      rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
+      rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
 
       if (tokenUriResult.isErr()) {
         return err({ type: "prepare_error", context: `Failed to get token URI` });

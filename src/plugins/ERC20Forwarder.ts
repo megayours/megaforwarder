@@ -52,7 +52,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
   }
 
   async prepare(input: ERC20ForwarderInput): Promise<Result<ERC20Event, OracleError>> {
-    const provider = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
+    const { provider, token } = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;
@@ -66,7 +66,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
       () => provider.getTransaction(transactionHash),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
     if (transaction.isErr()) {
       return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
     }
@@ -82,7 +82,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
       () => provider.getTransactionReceipt(transactionHash),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
     if (receipt.isErr()) {
       return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
     }

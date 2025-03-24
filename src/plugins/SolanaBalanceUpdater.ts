@@ -103,7 +103,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
       throttleWaitTime.observe({ identifier: 'solana', operation: 'getParsedTokenAccountsByOwner' }, (Date.now() - throttleStart) / 1000);
       rpcTimer({ status: tokenAccounts.isOk() ? 'success' : 'error' });
       
-      rpcCallsTotal.inc({ chain: "solana", chain_code: input.tokenMint, rpc_url: solanaRpcUrl }, 1);
+      rpcCallsTotal.inc({ chain: "solana", chain_code: input.tokenMint, token: solanaRpcUrl }, 1);
       if (tokenAccounts.isOk() && tokenAccounts.value.value.length > 0) {
         const accountInfo = tokenAccounts.value.value[0];
         if (accountInfo && accountInfo.account.data.parsed.info) {
@@ -129,7 +129,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
         throttleWaitTime.observe({ identifier: 'solana', operation: 'getAccount' }, (Date.now() - ataThrottleStart) / 1000);
         ataRpcTimer({ status: tokenAccountResult.isOk() ? 'success' : 'error' });
         
-        rpcCallsTotal.inc({ chain: "solana", chain_code: input.tokenMint, rpc_url: solanaRpcUrl }, 1);
+        rpcCallsTotal.inc({ chain: "solana", chain_code: input.tokenMint, token: solanaRpcUrl }, 1);
         if (tokenAccountResult.isOk()) {
           balance = tokenAccountResult.value.amount.toString();
           logger.debug(`Retrieved token balance from getAccount: ${balance}`);

@@ -69,7 +69,7 @@ export class SolanaListener extends Listener implements IListener {
       () => this.getSlot(),
       SOLANA_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: rpcUrl });
+    rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, token: rpcUrl });
     if (previousIndexedSlot.isErr()) {
       logger.error(`Failed to get slot`);
       return secondsFromNow(60);
@@ -91,7 +91,7 @@ export class SolanaListener extends Listener implements IListener {
       }
 
       const currentSlot = await executeThrottled<number>("solana", () => connection.getSlot(), SOLANA_THROTTLE_LIMIT);
-      rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: rpcUrl });
+      rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, token: rpcUrl });
       if (currentSlot.isErr()) {
         logger.error(`Failed to get slot`);
         return secondsFromNow(60);
@@ -108,7 +108,7 @@ export class SolanaListener extends Listener implements IListener {
         'confirmed'
       ), SOLANA_THROTTLE_LIMIT);
 
-      rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: rpcUrl });
+      rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, token: rpcUrl });
       
       if (signaturesResult.isErr() || !signaturesResult.value) {
         logger.error(`Failed to get signatures`);
@@ -147,7 +147,7 @@ export class SolanaListener extends Listener implements IListener {
         const tx = await executeThrottled<VersionedTransactionResponse | null>(rpcUrl, () => connection.getTransaction(sig.signature, {
           maxSupportedTransactionVersion: 0
         }), SOLANA_THROTTLE_LIMIT);
-        rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: rpcUrl });
+        rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, token: rpcUrl });
         
         if (tx.isErr()) {
           logger.error(`Failed to get transaction`);
