@@ -16,6 +16,7 @@ import { err, ok, Result, ResultAsync } from "neverthrow";
 import { executeThrottled } from "../util/throttle";
 import type { TransactionReceipt } from "ethers";
 import { EVM_THROTTLE_LIMIT } from "../util/constants";
+import { createProvider } from "../util/create-provider";
 
 export type ERC20ForwarderInput = {
   chain: string;
@@ -51,7 +52,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
 
   async prepare(input: ERC20ForwarderInput): Promise<Result<ERC20Event, OracleError>> {
     const rpcUrl = this.getRpcUrl(input.chain);
-    const provider = new JsonRpcProvider(rpcUrl);
+    const provider = createProvider(rpcUrl);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;

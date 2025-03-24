@@ -16,6 +16,7 @@ import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import type { TransactionReceipt } from "ethers";
 import { EVM_THROTTLE_LIMIT } from "../util/constants";
+import { createProvider } from "../util/create-provider";
 
 export type ERC721ForwarderInput = {
   chain: string;
@@ -52,7 +53,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
   async prepare(input: ERC721ForwarderInput): Promise<Result<ERC721Event, OracleError>> {
     const timestamp = Date.now();
     const rpcUrl = this.getRpcUrl(input.chain);
-    const provider = new JsonRpcProvider(rpcUrl);
+    const provider = createProvider(rpcUrl);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;

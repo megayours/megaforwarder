@@ -17,6 +17,7 @@ import { millisecondsFromNow, secondsFromNow } from "../util/time";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import { EVM_THROTTLE_LIMIT } from "../util/constants";
+import { createProvider } from "../util/create-provider";
 export type ContractInfo = {
   chain: "ethereum";
   contract: string;
@@ -59,7 +60,7 @@ export class EVMListener extends Listener {
   
   async run() {
     const rpcUrl = this.getRpcUrl();
-    const provider = new JsonRpcProvider(rpcUrl);
+    const provider = createProvider(rpcUrl);
     const contract = new Contract(this._contractInfo.contract, this._contractInfo.abi, provider);
 
     const previousIndexedBlockNumber = await this.initializeCurrentBlockNumber();

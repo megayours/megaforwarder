@@ -17,6 +17,7 @@ import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import type { TransactionReceipt } from "ethers";
 import { EVM_THROTTLE_LIMIT } from "../util/constants";
+import { createProvider } from "../util/create-provider";
 
 export type MocaStakeForwarderInput = {
   chain: string;
@@ -49,7 +50,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
 
   async prepare(input: MocaStakeForwarderInput): Promise<Result<StakingEvent[], OracleError>> {
     const rpcUrl = this.getRpcUrl(input.chain);
-    const provider = new JsonRpcProvider(rpcUrl);
+    const provider = createProvider(rpcUrl);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;
