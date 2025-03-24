@@ -17,7 +17,8 @@ import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import type { TransactionReceipt } from "ethers";
 import { EVM_THROTTLE_LIMIT } from "../util/constants";
-import { createProvider } from "../util/create-provider";
+import { createRandomProvider } from "../util/create-provider";
+import type { Rpc } from "../core/types/config/Rpc";
 
 export type MocaStakeForwarderInput = {
   chain: string;
@@ -49,8 +50,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
   }
 
   async prepare(input: MocaStakeForwarderInput): Promise<Result<StakingEvent[], OracleError>> {
-    const rpcUrl = this.getRpcUrl(input.chain);
-    const provider = createProvider(rpcUrl);
+    const provider = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;
@@ -60,11 +60,11 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
 
     // Check that transaction exists
     const transaction = await executeThrottled<TransactionResponse | null>(
-      rpcUrl,
+      input.chain,
       () => provider.getTransaction(transactionHash),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
     if (transaction.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
 
     // Verify transaction was included in a block
@@ -72,11 +72,11 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
 
     // Get transaction receipt to access logs
     const receipt = await executeThrottled<TransactionReceipt | null>(
-      rpcUrl,
+      input.chain,
       () => provider.getTransactionReceipt(transactionHash),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
     if (receipt.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
 
     // Verify that the transaction was successful

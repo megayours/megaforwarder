@@ -16,7 +16,8 @@ import { err, ok, Result, ResultAsync } from "neverthrow";
 import { executeThrottled } from "../util/throttle";
 import type { TransactionReceipt } from "ethers";
 import { EVM_THROTTLE_LIMIT } from "../util/constants";
-import { createProvider } from "../util/create-provider";
+import { createRandomProvider } from "../util/create-provider";
+import type { Rpc } from "../core/types/config/Rpc";
 
 export type ERC20ForwarderInput = {
   chain: string;
@@ -51,8 +52,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
   }
 
   async prepare(input: ERC20ForwarderInput): Promise<Result<ERC20Event, OracleError>> {
-    const rpcUrl = this.getRpcUrl(input.chain);
-    const provider = createProvider(rpcUrl);
+    const provider = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
 
     // Validate input event was actually an event
     const contractAddress = input.event.address;
@@ -62,11 +62,11 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
 
     // Check that transaction exists
     const transaction = await executeThrottled<TransactionResponse | null>(
-      rpcUrl,
+      input.chain,
       () => provider.getTransaction(transactionHash),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
     if (transaction.isErr()) {
       return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
     }
@@ -78,11 +78,11 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
 
     // Get transaction receipt to access logs
     const receipt = await executeThrottled<null | TransactionReceipt>(
-      rpcUrl,
+      input.chain,
       () => provider.getTransactionReceipt(transactionHash),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 1);
+    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 1);
     if (receipt.isErr()) {
       return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
     }
@@ -121,11 +121,11 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     if (isMint) {
       const contract = new ethers.Contract(contractAddress, erc20Abi, provider);
       const [decimals, name, symbol] = await Promise.all([
-        executeThrottled<number>(rpcUrl, () => contract.decimals!(), EVM_THROTTLE_LIMIT),
-        executeThrottled<string>(rpcUrl, () => contract.name!(), EVM_THROTTLE_LIMIT),
-        executeThrottled<string>(rpcUrl, () => contract.symbol!(), EVM_THROTTLE_LIMIT)
+        executeThrottled<number>(input.chain, () => contract.decimals!(), EVM_THROTTLE_LIMIT),
+        executeThrottled<string>(input.chain, () => contract.name!(), EVM_THROTTLE_LIMIT),
+        executeThrottled<string>(input.chain, () => contract.symbol!(), EVM_THROTTLE_LIMIT)
       ]);
-      rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, rpc_url: rpcUrl }, 3);
+      rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 3);
 
       if (decimals.isErr()) return err({ type: "prepare_error", context: `Failed to get decimals` });
       if (name.isErr()) return err({ type: "prepare_error", context: `Failed to get name` });

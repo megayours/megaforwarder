@@ -1,4 +1,4 @@
-import { Contract, JsonRpcProvider } from "ethers";
+import { Contract } from "ethers";
 import type { ContractEventName, InterfaceAbi } from "ethers";
 import { Listener } from "../core/listener/Listener";
 import { blockHeightGauge, logger, rpcCallsTotal } from "../util/monitoring";
@@ -17,7 +17,8 @@ import { millisecondsFromNow, secondsFromNow } from "../util/time";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import { EVM_THROTTLE_LIMIT } from "../util/constants";
-import { createProvider } from "../util/create-provider";
+import { createRandomProvider } from "../util/create-provider";
+import type { Rpc } from "../core/types/config/Rpc";
 export type ContractInfo = {
   chain: "ethereum";
   contract: string;
@@ -59,8 +60,7 @@ export class EVMListener extends Listener {
   }
   
   async run() {
-    const rpcUrl = this.getRpcUrl();
-    const provider = createProvider(rpcUrl);
+    const provider = createRandomProvider(config.rpc[this._contractInfo.chain] as unknown as Rpc[]);
     const contract = new Contract(this._contractInfo.contract, this._contractInfo.abi, provider);
 
     const previousIndexedBlockNumber = await this.initializeCurrentBlockNumber();
@@ -75,7 +75,7 @@ export class EVMListener extends Listener {
       () => provider.getBlockNumber(),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract, rpc_url: rpcUrl });
+    rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract });
     
     if (currentBlockNumber.isErr()) {
       logger.error(`Failed to get current block number`, this.logMetadata(), {
@@ -95,7 +95,7 @@ export class EVMListener extends Listener {
         () => contract.queryFilter(contractFilter, startBlock, blockNumber),
         EVM_THROTTLE_LIMIT
       );
-      rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract, rpc_url: rpcUrl });
+      rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract });
       if (foundEvents.isErr()) {
         logger.error(`Failed to get events`, this.logMetadata(), {
           error: foundEvents.error
@@ -139,17 +139,6 @@ export class EVMListener extends Listener {
 
   private uniqueId(event: EventWrapper) {
     return `${event.event.transactionHash}-${event.event.index}`;
-  }
-
-  private getRpcUrl() {
-    const rpcs = config.rpc[this._contractInfo.chain];
-    if (!rpcs) throw new Error(`No RPC URL found for chain ${this._contractInfo.chain}`,);
-
-    const rpcUrl = rpcs?.[Math.floor(Math.random() * rpcs.length)];
-    if (!rpcUrl) throw new Error(`No RPC URL found for chain ${this._contractInfo.chain}`);
-
-    logger.info(`Selected RPC URL: ${rpcUrl}`, this.logMetadata());
-    return rpcUrl;
   }
 
   private async initializeCurrentBlockNumber() {

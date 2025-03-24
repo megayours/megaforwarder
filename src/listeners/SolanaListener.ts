@@ -187,6 +187,6 @@ export class SolanaListener extends Listener implements IListener {
     if (!rpcUrl) throw new Error(`No RPC URL found for chain solana_devnet`);
 
     logger.debug(`Selected RPC URL: ${rpcUrl}`);
-    return rpcUrl;
+    return rpcUrl as string;
   }
 }
