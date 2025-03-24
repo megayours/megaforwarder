@@ -6,7 +6,7 @@ export const createProvider = (url: string) => {
     return new AlchemyProvider(url);
   } else if (url.includes("infura")) {
     return new InfuraProvider(url);
-  } else if (url.includes("quicknode")) {
+  } else if (url.includes("quicknode") || url.includes("quiknode")) {
     return new QuickNodeProvider(url);
   }
 
