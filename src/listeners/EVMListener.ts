@@ -60,7 +60,7 @@ export class EVMListener extends Listener {
   }
   
   async run() {
-    const provider = createRandomProvider(config.rpc[this._contractInfo.chain] as unknown as Rpc[]);
+    const { provider, token } = createRandomProvider(config.rpc[this._contractInfo.chain] as unknown as Rpc[]);
     const contract = new Contract(this._contractInfo.contract, this._contractInfo.abi, provider);
 
     const previousIndexedBlockNumber = await this.initializeCurrentBlockNumber();
@@ -75,12 +75,10 @@ export class EVMListener extends Listener {
       () => provider.getBlockNumber(),
       EVM_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract });
+    rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract, token });
     
     if (currentBlockNumber.isErr()) {
-      logger.error(`Failed to get current block number`, this.logMetadata(), {
-        error: currentBlockNumber.error
-      });
+      logger.error(`Failed to get current block number`, { ...this.logMetadata(), error: currentBlockNumber.error });
       return secondsFromNow(15);
     }
 
@@ -95,11 +93,9 @@ export class EVMListener extends Listener {
         () => contract.queryFilter(contractFilter, startBlock, blockNumber),
         EVM_THROTTLE_LIMIT
       );
-      rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract });
+      rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract, token });
       if (foundEvents.isErr()) {
-        logger.error(`Failed to get events`, this.logMetadata(), {
-          error: foundEvents.error
-        });
+        logger.error(`Failed to get events`, { ...this.logMetadata(), error: foundEvents.error });
         return secondsFromNow(30);
       }
 
@@ -121,9 +117,7 @@ export class EVMListener extends Listener {
           logger.info(`Skipping event ${this.uniqueId(event)} because it was already processed`, this.logMetadata());
           continue;
         }
-        logger.error(`Failed to handle event: ${event.event.transactionHash}`, this.logMetadata(), {
-          error: result.error
-        });
+        logger.error(`Failed to handle event: ${event.event.transactionHash}`, { ...this.logMetadata(), error: result.error });
         return secondsFromNow(30);
       }
 

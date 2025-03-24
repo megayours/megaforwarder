@@ -35,7 +35,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
   constructor() {
     super({ id: SolanaMegaForwarder.pluginId });
 
-    const solanaRpcUrl = config.rpc["solana_devnet"]?.[0];
+    const solanaRpcUrl = config.rpc["solana_devnet"]?.[0] as string;
     if (!solanaRpcUrl) throw new Error("No Solana RPC URL found");
 
     this._connection = new Connection(solanaRpcUrl, "confirmed");
@@ -82,7 +82,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
       }),
       SOLANA_THROTTLE_LIMIT
     );
-    rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, rpc_url: this._connection.rpcEndpoint }, 1);
+    rpcCallsTotal.inc({ chain: "solana", chain_code: this._programId, token: this._connection.rpcEndpoint }, 1);
 
     if (transaction.isErr()) {
       return err({ type: "prepare_error", context: `Transaction not found` });
