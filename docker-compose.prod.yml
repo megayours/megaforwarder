@@ -9,9 +9,6 @@ services:
       - ./config/config1.prod.yml:/usr/src/app/config/config.yml
     environment:
       CONFIG_FILE: /usr/src/app/config/config.yml
-    env_file:
-      - path: ./.env
-      - required: true
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -43,9 +40,6 @@ services:
       - ./config/config2.prod.yml:/usr/src/app/config/config.yml
     environment:
       CONFIG_FILE: /usr/src/app/config/config.yml
-    env_file:
-      - path: ./.env
-      - required: true
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -77,9 +71,6 @@ services:
       - ./config/config3.prod.yml:/usr/src/app/config/config.yml
     environment:
       CONFIG_FILE: /usr/src/app/config/config.yml
-    env_file:
-      - path: ./.env
-      - required: true
     restart: unless-stopped
     labels:
       - "traefik.enable=true"

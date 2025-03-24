@@ -8,4 +8,7 @@ services:
       - ./config/oracle1.yaml:/usr/src/app/config/config.yml
     environment:
       CONFIG_FILE: /usr/src/app/config/config.yml
+    env_file:
+      - path: ./.env
+      - required: true
     restart: unless-stopped
