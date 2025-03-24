@@ -77,7 +77,9 @@ export class EVMListener extends Listener {
     rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract, rpc_url: rpcUrl });
     
     if (currentBlockNumber.isErr()) {
-      logger.error(`Failed to get current block number`, this.logMetadata());
+      logger.error(`Failed to get current block number`, this.logMetadata(), {
+        error: currentBlockNumber.error
+      });
       return secondsFromNow(15);
     }
 
@@ -94,7 +96,9 @@ export class EVMListener extends Listener {
       );
       rpcCallsTotal.inc({ chain: this._contractInfo.chain, chain_code: this._contractInfo.contract, rpc_url: rpcUrl });
       if (foundEvents.isErr()) {
-        logger.error(`Failed to get events`, this.logMetadata());
+        logger.error(`Failed to get events`, this.logMetadata(), {
+          error: foundEvents.error
+        });
         return secondsFromNow(30);
       }
 
@@ -116,7 +120,9 @@ export class EVMListener extends Listener {
           logger.info(`Skipping event ${this.uniqueId(event)} because it was already processed`, this.logMetadata());
           continue;
         }
-        logger.error(`Failed to handle event: ${event.event.transactionHash}, error: ${JSON.stringify(result)}`, this.logMetadata());
+        logger.error(`Failed to handle event: ${event.event.transactionHash}`, this.logMetadata(), {
+          error: result.error
+        });
         return secondsFromNow(30);
       }
 
@@ -141,7 +147,7 @@ export class EVMListener extends Listener {
     const rpcUrl = rpcs?.[Math.floor(Math.random() * rpcs.length)];
     if (!rpcUrl) throw new Error(`No RPC URL found for chain ${this._contractInfo.chain}`);
 
-    logger.debug(`Selected RPC URL: ${rpcUrl}`);
+    logger.info(`Selected RPC URL: ${rpcUrl}`, this.logMetadata());
     return rpcUrl;
   }
 
