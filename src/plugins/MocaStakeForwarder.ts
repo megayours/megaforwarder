@@ -18,6 +18,7 @@ import type { TransactionReceipt } from "ethers";
 import { EVM_THROTTLE_LIMIT } from "../util/constants";
 import { createRandomProvider } from "../util/create-provider";
 import type { Rpc } from "../core/types/config/Rpc";
+import { postchainConfig } from "../util/postchain-config";
 
 export type MocaStakeForwarderInput = {
   chain: string;
@@ -277,6 +278,7 @@ export class MocaStakeForwarder extends Plugin<MocaStakeForwarderInput, StakingE
   async execute(_gtx: GTX): Promise<Result<boolean, OracleError>> {
     logger.debug(`Executing GTX`);
     const client = await createClient({
+      ...postchainConfig,
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._blockchainRid.toString('hex')
     })

@@ -173,12 +173,20 @@ export class AccountLinker extends Plugin<AccountLinkerInput, string[], GTX, voi
     logger.info(`Executing GTX for account linker`);
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
-      blockchainRid: this._blockchainRid.toString('hex')
+      blockchainRid: this._blockchainRid.toString('hex'),
+      dappStatusPolling: {
+        interval: 1000,
+        count: 60
+      }
     });
 
     try {
-      await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.Dapp);
-      logger.info(`Account linker executed successfully`);
+      const receipt = await client.sendTransaction(gtx.serialize(_gtx));
+      logger.info(`Transaction receipt: ${JSON.stringify(receipt)}`);
+      if (receipt.statusCode !== 200) {
+        return err({ type: "execute_error", context: receipt.status });
+      }
+      logger.info(`Account linker executed successfully with txRid: ${receipt.transactionRid.toString('hex')}`);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
       if (error.status === 409) {

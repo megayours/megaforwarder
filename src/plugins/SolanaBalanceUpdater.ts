@@ -18,6 +18,7 @@ import { err, ok, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import { SOLANA_THROTTLE_LIMIT } from "../util/constants";
+import { postchainConfig } from "../util/postchain-config";
 
 type SolanaBalanceUpdaterInput = {
   tokenMint: string;
@@ -203,6 +204,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     
     logger.debug(`Executing GTX for balance update`);
     const client = await createClient({
+      ...postchainConfig,
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._megaYoursBlockchainRid.toString('hex')
     });

@@ -9,6 +9,7 @@ import { err, ok, type Result } from "neverthrow";
 import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import { SOLANA_THROTTLE_LIMIT } from "../util/constants";
+import { postchainConfig } from "../util/postchain-config";
 
 type SolanaMegaForwarderInput = {
   txSignature: string;
@@ -156,6 +157,7 @@ export class SolanaMegaForwarder extends Plugin<SolanaMegaForwarderInput, Event,
   async execute(_gtx: GTX): Promise<Result<boolean, OracleError>> {
     logger.debug(`Executing GTX`);
     const client = await createClient({
+      ...postchainConfig,
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._megaYoursBlockchainRid.toString('hex')
     })

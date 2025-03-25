@@ -18,6 +18,7 @@ import type { TransactionReceipt } from "ethers";
 import { EVM_THROTTLE_LIMIT } from "../util/constants";
 import { createRandomProvider } from "../util/create-provider";
 import type { Rpc } from "../core/types/config/Rpc";
+import { postchainConfig } from "../util/postchain-config";
 export type ERC721ForwarderInput = {
   chain: string;
   collection: string;
@@ -241,6 +242,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
   async execute(_gtx: GTX): Promise<Result<boolean, OracleError>> {
     logger.debug(`Executing GTX`);
     const client = await createClient({
+      ...postchainConfig,
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._blockchainRid.toString('hex')
     })
@@ -259,17 +261,6 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     }
 
     return ok(true);
-  }
-
-  private getRpcUrl(chain: string) {
-    const rpcs = config.rpc[chain];
-    if (!rpcs) throw new Error(`No RPC Configuration found`);
-
-    const rpcUrl = rpcs?.[Math.floor(Math.random() * rpcs.length)];
-    if (!rpcUrl) throw new Error(`No RPC URL found for chain ${chain}`);
-
-    logger.debug(`Selected RPC URL: ${rpcUrl}`);
-    return rpcUrl;
   }
 
   private safelyExtractAddress(topic: string | undefined): string | undefined {
