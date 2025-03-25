@@ -1,4 +1,4 @@
-# decentralized-oracle-v2
+# MegaForwarder
 
 To install dependencies:
 
