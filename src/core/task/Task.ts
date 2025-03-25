@@ -15,7 +15,6 @@ export class Task<T> {
   private startTime: number;
 
   constructor(pluginId: string, input: unknown) {
-    logger.info(`Creating task for plugin ${pluginId}`);
     const plugin = PluginRegistry.getInstance().get(pluginId);
     if (!plugin) {
       logger.error(`Plugin ${pluginId} not found`);
@@ -141,14 +140,12 @@ export class Task<T> {
   }
 
   async start(): Promise<Result<boolean, OracleError>> {
-    logger.info(`Starting task for plugin ${this.plugin.metadata.id}`);
     // Run each phase in sequence
     const prepareResultsRes = await this.runPreparePhase();
-    logger.info(`Prepare phase completed for plugin ${this.plugin.metadata.id}`);
 
     if (prepareResultsRes.isErr()) {
       if (prepareResultsRes.error.type === "permanent_error") {
-        logger.info(`Permanent error during prepare phase for plugin ${this.plugin.metadata.id}`);
+        logger.warn(`Permanent error during prepare phase for plugin ${this.plugin.metadata.id}`);
         return ok(true);
       }
       logger.error(`Error during prepare phase: ${prepareResultsRes.error.type} > ${prepareResultsRes.error.context}`);
@@ -157,27 +154,23 @@ export class Task<T> {
 
     const prepareResults = prepareResultsRes.value;
     const processedData = await this.runProcessPhase(prepareResults);
-    logger.info(`Process phase completed for plugin ${this.plugin.metadata.id}`);
     if (processedData.isErr()) {
       logger.error(`Error during process phase: ${processedData.error.type} > ${processedData.error.context}`);
       return err(processedData.error);
     }
 
     const validatedData = await this.runValidatePhase(processedData.value, prepareResults);
-    logger.info(`Validate phase completed for plugin ${this.plugin.metadata.id}`);
     if (validatedData.isErr()) {
       logger.error(`Error during validate phase: ${validatedData.error.type} > ${validatedData.error.context}`);
       return err(validatedData.error);
     }
 
     const executeResult = await this.runExecutePhase(validatedData.value);
-    logger.info(`Execute phase completed for plugin ${this.plugin.metadata.id}`);
     if (executeResult.isErr()) {
       logger.error(`Error during execute phase: ${executeResult.error.type} > ${executeResult.error.context}`);
       return err(executeResult.error);
     }
 
-    logger.info(`Task completed for plugin ${this.plugin.metadata.id}`);
     completedTasksTotal.inc({ plugin_id: this.plugin.metadata.id });
     taskDurationTotal.observe({ plugin_id: this.plugin.metadata.id }, Date.now() - this.startTime);
     return ok(true);
