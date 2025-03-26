@@ -29,13 +29,14 @@ export class MocaStakeListener extends Listener {
   private readonly _blockchainRid: string;
   private readonly _blockHeightIncrement: number;
   private readonly _throttleOnSuccessMs: number;
-
+  private readonly _searchedBlockNumbers: Map<string, number>;
   constructor() {
     super(`moca-stake-listener`);
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
     this._blockchainRid = config.abstractionChain.blockchainRid;
     this._blockHeightIncrement = this.config["blockHeightIncrement"] as number;
     this._throttleOnSuccessMs = this.config["throttleOnSuccessMs"] as number;
+    this._searchedBlockNumbers = new Map();
   }
 
   async run() {
@@ -69,7 +70,9 @@ export class MocaStakeListener extends Listener {
         continue;
       }
 
-      const startBlock = contract.block_number;
+      const lastSearchedBlockNumber = this._searchedBlockNumbers.get(contractAddress);
+
+      const startBlock = lastSearchedBlockNumber && lastSearchedBlockNumber > contract.block_number ? lastSearchedBlockNumber : contract.block_number;
       const endBlock = Math.min(startBlock + this._blockHeightIncrement, currentBlockNumber);
 
       const stakedFilter = ethersContract.filters!.Staked!();
@@ -91,6 +94,8 @@ export class MocaStakeListener extends Listener {
           return secondsFromNow(60);
         }
       }
+
+      this._searchedBlockNumbers.set(contractAddress, endBlock);
     }
 
     return millisecondsFromNow(this._throttleOnSuccessMs);

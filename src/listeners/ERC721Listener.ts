@@ -23,13 +23,15 @@ export class ERC721Listener extends Listener {
   private readonly _blockchainRid: string;
   private readonly _blockHeightIncrement: number;
   private readonly _throttleOnSuccessMs: number;
-  
+  private _searchedBlockNumbers: Map<string, number>;
+
   constructor() {
     super(`erc721-listener`);
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
     this._blockchainRid = config.abstractionChain.blockchainRid;
     this._blockHeightIncrement = this.config["blockHeightIncrement"] as number;
     this._throttleOnSuccessMs = this.config["throttleOnSuccessMs"] as number;
+    this._searchedBlockNumbers = new Map();
   }
   
   async run() {
@@ -66,11 +68,14 @@ export class ERC721Listener extends Listener {
         continue;
       }
 
-      const startBlock = contract.block_number;
+      const lastSearchedBlockNumber = this._searchedBlockNumbers.get(contractAddress);
+
+      const startBlock = lastSearchedBlockNumber && lastSearchedBlockNumber > contract.block_number ? lastSearchedBlockNumber : contract.block_number;
       const endBlock = Math.min(startBlock + this._blockHeightIncrement, currentBlockNumber);
 
       const filter = ethersContract.filters!.Transfer!();
       const events = await ethersContract.queryFilter(filter, startBlock, endBlock);
+      logger.info(`ERC721Listener: Found ${events.length} events between blocks ${startBlock} and ${endBlock}`, { events });
       for (const event of this.sortEvents(events)) {
         const result = await this.handleEvent(contract.chain, contract.collection, event);
         if (result.isErr()) {
@@ -78,6 +83,8 @@ export class ERC721Listener extends Listener {
           return secondsFromNow(60);
         }
       }
+
+      this._searchedBlockNumbers.set(contractAddress, endBlock);
     }
 
     return millisecondsFromNow(this._throttleOnSuccessMs);
