@@ -22,6 +22,7 @@ import { ERC721Listener } from "./listeners/ERC721Listener";
 import { EVMContractRegistration } from "./plugins/EVMContractRegistration";
 import { MocaStakeListener } from "./listeners/MocaStakeListener";
 import { ERC20Listener } from "./listeners/ERC20Listener";
+import { BlockFetcher } from "./plugins/BlockFetcher";
 
 const pluginRegistry = PluginRegistry.getInstance();
 pluginRegistry.register(new SolanaMegaForwarder());
@@ -31,6 +32,7 @@ pluginRegistry.register(new MocaStakeForwarder());
 pluginRegistry.register(new SolanaBalanceUpdater());
 pluginRegistry.register(new AccountLinker());
 pluginRegistry.register(new EVMContractRegistration());
+pluginRegistry.register(new BlockFetcher());
 
 if (config.primary) {
   const listenerHandler = ListenerRegistry.getInstance();

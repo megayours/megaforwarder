@@ -8,7 +8,6 @@ import type { EventLog } from "ethers";
 import { Task } from "../core/task/Task";
 import config from "../config";
 import { ok, Result, ResultAsync } from "neverthrow";
-import { createCache, type Cache } from "cache-manager";
 import { millisecondsFromNow, secondsFromNow } from "../util/time";
 import type { OracleError } from "../util/errors";
 import { createRandomProvider } from "../util/create-provider";
@@ -18,6 +17,7 @@ import mocaStakeAbi from "../util/abis/moca-staking";
 import { MocaStakeForwarder } from "../plugins/MocaStakeForwarder";
 import type { MocaStakeForwarderInput } from "../plugins/MocaStakeForwarder";
 import cache from "../core/cache";
+import { getBlockNumberCacheKey } from "../util/cache-keys";
 
 type EventWrapper = {
   event: Log | EventLog;
@@ -47,7 +47,7 @@ export class MocaStakeListener extends Listener {
       const contractAddress = `0x${bufferToHex(contract.contract)}`;
       const ethersContract = new Contract(contractAddress, mocaStakeAbi, provider);
 
-      const cacheKey = this.getBlockNumberCacheKey(contract.chain);
+      const cacheKey = getBlockNumberCacheKey(contract.chain);
       let currentBlockNumber: number = await cache.get(cacheKey) as number;
       if (!currentBlockNumber) {
         const result = await ResultAsync.fromPromise<number, Error>(
@@ -99,10 +99,6 @@ export class MocaStakeListener extends Listener {
     }
 
     return millisecondsFromNow(this._throttleOnSuccessMs);
-  }
-
-  private getBlockNumberCacheKey(chain: string) {
-    return `${chain}-block-number`;
   }
 
   private async getContracts() {

@@ -17,6 +17,7 @@ import erc20 from "../util/abis/erc20";
 import { ERC20Forwarder } from "../plugins/ERC20Forwarder";
 import type { ERC20ForwarderInput } from "../plugins/ERC20Forwarder";
 import cache from "../core/cache";
+import { getBlockNumberCacheKey } from "../util/cache-keys";
 
 export class ERC20Listener extends Listener {
   private readonly _directoryNodeUrlPool: string[];
@@ -41,7 +42,7 @@ export class ERC20Listener extends Listener {
       const contractAddress = `0x${bufferToHex(contract.contract)}`;
       const ethersContract = new Contract(contractAddress, erc20, provider);
 
-      const cacheKey = this.getBlockNumberCacheKey(contract.chain);
+      const cacheKey = getBlockNumberCacheKey(contract.chain);
       let currentBlockNumber: number = await cache.get(cacheKey) as number;
       if (!currentBlockNumber) {
         const result = await ResultAsync.fromPromise<number, Error>(
@@ -83,10 +84,6 @@ export class ERC20Listener extends Listener {
     }
 
     return millisecondsFromNow(this._throttleOnSuccessMs);
-  }
-
-  private getBlockNumberCacheKey(chain: string) {
-    return `${chain}-block-number`;
   }
 
   private async getContracts() {

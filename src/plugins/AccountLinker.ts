@@ -146,7 +146,7 @@ export class AccountLinker extends Plugin<AccountLinkerInput, string[], GTX, voi
       const account = accounts[i];
       if (!account) return err({ type: "process_error", context: "No account" });
 
-      tx = gtx.addTransactionToGtx("reputation.link_accounts", [baseAccount, account], tx);
+      tx = gtx.addTransactionToGtx("account_links.link_accounts", [baseAccount, account], tx);
     }
 
     tx = gtx.addTransactionToGtx("nop", [Math.floor(Math.random() * 1000000)], tx);

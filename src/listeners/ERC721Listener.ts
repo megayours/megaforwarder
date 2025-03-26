@@ -17,6 +17,7 @@ import type { Rpc } from "../core/types/config/Rpc";
 import type { ContractInfo } from "../core/types/abstraction-chain/contract-info";
 import erc721 from "../util/abis/erc721";
 import cache from "../core/cache";
+import { getBlockNumberCacheKey } from "../util/cache-keys";
 
 export class ERC721Listener extends Listener {
   private readonly _directoryNodeUrlPool: string[];
@@ -43,7 +44,7 @@ export class ERC721Listener extends Listener {
       const ethersContract = new Contract(contractAddress, erc721, provider);
       logger.info(`ERC721Listener: Created contract`, { ethersContract });
 
-      const cacheKey = this.getBlockNumberCacheKey(contract.chain);
+      const cacheKey = getBlockNumberCacheKey(contract.chain);
       let currentBlockNumber: number = await cache.get(cacheKey) as number;
       if (!currentBlockNumber) {
         const result = await ResultAsync.fromPromise<number, Error>(
@@ -88,10 +89,6 @@ export class ERC721Listener extends Listener {
     }
 
     return millisecondsFromNow(this._throttleOnSuccessMs);
-  }
-
-  private getBlockNumberCacheKey(chain: string) {
-    return `${chain}-block-number`;
   }
 
   private async getContracts() {
