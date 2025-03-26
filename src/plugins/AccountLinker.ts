@@ -10,6 +10,7 @@ import nacl from "tweetnacl";
 import { ecdsaSign } from "secp256k1";
 import config from "../config";
 import { logger } from "../util/monitoring";
+import { postchainConfig } from "../util/postchain-config";
 
 type AccountSignature = {
   type: "solana" | "evm";
@@ -172,12 +173,9 @@ export class AccountLinker extends Plugin<AccountLinkerInput, string[], GTX, voi
   async execute(_gtx: GTX): Promise<Result<void, OracleError>> {
     logger.info(`Executing GTX for account linker`);
     const client = await createClient({
+      ...postchainConfig,
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._blockchainRid.toString('hex'),
-      dappStatusPolling: {
-        interval: 1000,
-        count: 60
-      }
     });
 
     try {
