@@ -75,6 +75,7 @@ export class ERC721Listener extends Listener {
         const result = await this.handleEvent(contract.chain, contract.collection, event);
         if (result.isErr()) {
           logger.error(`Failed to handle event`, { contract, error: result.error });
+          return secondsFromNow(60);
         }
       }
     }

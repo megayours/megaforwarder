@@ -72,6 +72,7 @@ export class ERC20Listener extends Listener {
         const result = await this.handleEvent(contract.chain, event);
         if (result.isErr()) {
           logger.error(`Failed to handle event`, { contract, error: result.error });
+          return secondsFromNow(60);
         }
       }
     }
