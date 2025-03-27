@@ -42,7 +42,6 @@ export class ERC721Listener extends Listener {
       const { provider } = createRandomProvider(config.rpc[contract.chain] as unknown as Rpc[]);
       const contractAddress = `0x${bufferToHex(contract.contract)}`;
       const ethersContract = new Contract(contractAddress, erc721, provider);
-      logger.info(`ERC721Listener: Created contract`, { ethersContract });
 
       const cacheKey = getBlockNumberCacheKey(contract.chain);
       let currentBlockNumber: number = await cache.get(cacheKey) as number;
@@ -76,7 +75,7 @@ export class ERC721Listener extends Listener {
 
       const filter = ethersContract.filters!.Transfer!();
       const events = await ethersContract.queryFilter(filter, startBlock, endBlock);
-      logger.info(`ERC721Listener: Found ${events.length} events between blocks ${startBlock} and ${endBlock}`, { events });
+      logger.info(`ERC721Listener: Found ${events.length} events between blocks ${startBlock} and ${endBlock}`);
       for (const event of this.sortEvents(events)) {
         const result = await this.handleEvent(contract.chain, contract.collection, event);
         if (result.isErr()) {

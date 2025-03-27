@@ -6,11 +6,6 @@ import taskValidate from "./routes/taskValidate";
 import taskPrepare from "./routes/taskPrepare";
 import { ListenerRegistry } from "./core/listener/ListenerRegistry";
 import { logger, register } from "./util/monitoring";
-import { EVMListener } from "./listeners/EVMListener";
-import type { Contract, ContractEventName } from "ethers";
-import erc721Abi from "./util/abis/erc721";
-import erc20Abi from "./util/abis/erc20";
-import mocaStakeAbi from "./util/abis/moca-staking";
 import { ERC721Forwarder } from "./plugins/ERC721Forwarder";
 import { ERC20Forwarder } from "./plugins/ERC20Forwarder";
 import { MocaStakeForwarder } from "./plugins/MocaStakeForwarder";
@@ -22,7 +17,7 @@ import { ERC721Listener } from "./listeners/ERC721Listener";
 import { EVMContractRegistration } from "./plugins/EVMContractRegistration";
 import { MocaStakeListener } from "./listeners/MocaStakeListener";
 import { ERC20Listener } from "./listeners/ERC20Listener";
-import { BlockFetcher } from "./plugins/BlockFetcher";
+import { ManageMegadata } from "./plugins/ManageMegadata";
 
 const pluginRegistry = PluginRegistry.getInstance();
 pluginRegistry.register(new SolanaMegaForwarder());
@@ -32,7 +27,7 @@ pluginRegistry.register(new MocaStakeForwarder());
 pluginRegistry.register(new SolanaBalanceUpdater());
 pluginRegistry.register(new AccountLinker());
 pluginRegistry.register(new EVMContractRegistration());
-pluginRegistry.register(new BlockFetcher());
+pluginRegistry.register(new ManageMegadata());
 
 if (config.primary) {
   const listenerHandler = ListenerRegistry.getInstance();

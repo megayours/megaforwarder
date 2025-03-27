@@ -9,8 +9,10 @@ import config from "../config";
 import { logger } from "../util/monitoring";
 import { postchainConfig } from "../util/postchain-config";
 import { hexToBuffer } from "../util/hex";
+import { validateAuth, type AccountSignature } from "../util/auth";
 
 type EVMContractRegistrationInput = {
+  auth: AccountSignature;
   chain: string;
   contract: string;
   blockNumber: number;
@@ -27,16 +29,21 @@ export class EVMContractRegistration extends Plugin<EVMContractRegistrationInput
   constructor() {
     super({ id: EVMContractRegistration.pluginId });
 
-    this._directoryNodeUrlPool = this.config.directoryNodeUrlPool as string[];
-    this._blockchainRid = Buffer.from(this.config.blockchainRid as string, "hex");
+    this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool as string[];
+    this._blockchainRid = Buffer.from(config.abstractionChain.blockchainRid as string, "hex");
   }
 
   async prepare(input: EVMContractRegistrationInput): Promise<Result<EVMContractRegistrationInput, OracleError>> {
+    const authResult = validateAuth(input.auth, `Asset Registration`);
+    if (authResult.isErr()) {
+      return err(authResult.error);
+    }
+
     return ok(input);
   }
 
   async process(input: ProcessInput<EVMContractRegistrationInput>[]): Promise<Result<GTX, OracleError>> {
-    logger.info(`Processing account linker`);
+    logger.info(`Processing evm contract registration`);
     const selectedData = input[0];
     if (!selectedData) {
       return err({ type: "process_error", context: "No input data" });

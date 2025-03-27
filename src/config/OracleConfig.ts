@@ -4,6 +4,7 @@ import type { Rpcs } from '../core/types/config/Rpc';
 import { type Peer } from '../core/types/config/Peer';
 import type { WebhookConfig } from '../core/types/config/Webhook';
 import yaml from 'yaml';
+import type { AuthConfig } from '../core/types/config/AuthConfig';
 
 /**
  * Configuration for an oracle instance
@@ -19,6 +20,7 @@ export type OracleConfigOptions = {
   abstractionChain: AbstractionChain;
   rpc: Rpcs;
   webhooks: WebhookConfig;
+  auth: AuthConfig;
   listener: ListenerConfig;
   plugins: Record<string, Record<string, Record<string, unknown>>>;
   listeners: Record<string, Record<string, Record<string, unknown>>>;
@@ -42,6 +44,7 @@ export class OracleConfig {
   abstractionChain: AbstractionChain;
   rpc: Rpcs;
   webhooks: WebhookConfig;
+  auth: AuthConfig;
   listener: ListenerConfig;
   plugins: Record<string, Record<string, Record<string, unknown>>>;
   listeners: Record<string, Record<string, Record<string, unknown>>>;
@@ -62,6 +65,7 @@ export class OracleConfig {
     this.abstractionChain = options.abstractionChain;
     this.rpc = options.rpc;
     this.webhooks = options.webhooks;
+    this.auth = options.auth;
     this.listener = options.listener;
     this.plugins = options.plugins;
     this.listeners = options.listeners;

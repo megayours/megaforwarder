@@ -19,6 +19,7 @@ import { executeThrottled } from "../util/throttle";
 import { EVM_THROTTLE_LIMIT } from "../util/constants";
 import { createRandomProvider } from "../util/create-provider";
 import type { Rpc } from "../core/types/config/Rpc";
+
 export type ContractInfo = {
   chain: "ethereum";
   contract: string;
