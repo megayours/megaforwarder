@@ -71,8 +71,8 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
         blockchainRid: this._blockchainRid.toString('hex'),
       });
       
-      const ownerCollections = await client.query<Buffer[]>("megadata.get_collections", { owner: input.auth.account });
-      if (!ownerCollections.some((c) => c.equals(collectionId))) {
+      const ownerCollections = await client.query<{ id: Buffer }[]>("megadata.get_collections", { owner: input.auth.account });
+      if (!ownerCollections.some((c) => c.id.equals(collectionId))) {
         return err({
           type: "validation_error",
           context: `Collection ${collection} not found`
