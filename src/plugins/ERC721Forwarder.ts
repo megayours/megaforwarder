@@ -133,6 +133,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
       const metadataTimestamp = Date.now();
       const response = await fetch(preparedTokenUri);
       const json = await response.json();
+      logger.info(`Fetched metadata:`, json);
       const metadataTimeTaken = Date.now() - metadataTimestamp;
       if (metadataTimeTaken > 1000) {
         logger.warn(`ERC721Forwarder took ${metadataTimeTaken}ms to fetch metadata`, { preparedTokenUri });
