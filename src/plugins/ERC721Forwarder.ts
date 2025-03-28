@@ -129,7 +129,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
 
       tokenUri = tokenUriResult.value;
       const preparedTokenUri = this.routeViaGateway(tokenUri!);
-      logger.debug(`Prepared token URI: ${preparedTokenUri}`);
+      logger.info(`Prepared token URI: ${preparedTokenUri}`);
       const metadataTimestamp = Date.now();
       const response = await fetch(preparedTokenUri);
       const json = await response.json();
