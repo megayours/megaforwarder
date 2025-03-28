@@ -18,6 +18,11 @@ type ManageMegadataInput = {
   operation: Operation;
 };
 
+type CreateCollectionInput = ManageMegadataInput & {
+  operation: "create_collection";
+  name: string;
+}
+
 type UpsertItemInput = ManageMegadataInput & {
   operation: "upsert_item";
   collection: string;
@@ -116,7 +121,8 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
     let tx = gtx.emptyGtx(this._blockchainRid);
 
     if (selectedData.data.operation === "create_collection") {
-      tx = gtx.addTransactionToGtx("megadata.create_collection", [selectedData.data.auth.account], tx);
+      const createCollectionInput = selectedData.data as CreateCollectionInput;
+      tx = gtx.addTransactionToGtx("megadata.create_collection", [createCollectionInput.auth.account, createCollectionInput.name], tx);
     } else if (selectedData.data.operation === "create_item") {
       const createItemInput = selectedData.data as UpsertItemInput;
       tx = gtx.addTransactionToGtx("megadata.create_item", [Buffer.from(createItemInput.collection, 'hex'), createItemInput.tokenId, JSON.stringify(createItemInput.properties)], tx);
