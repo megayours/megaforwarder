@@ -47,8 +47,8 @@ export class ListenerRegistry {
       
       // Update next run time
       scheduledListener.nextRunTime = nextRunTime;
-    } catch (error) {
-      logger.error("Critical error in listener", { error, listener: scheduledListener.listener.id });
+    } catch (error: any) {
+      logger.error("Critical error in listener", { error: error.message ?? error, listener: scheduledListener.listener.id });
       
       // Schedule for a minute later on failure
       scheduledListener.nextRunTime = minutesFromNow(1);
