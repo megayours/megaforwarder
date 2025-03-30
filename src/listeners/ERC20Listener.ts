@@ -38,11 +38,11 @@ export class ERC20Listener extends Listener {
     const contracts = await this.getContracts();
     logger.info(`ERC20Listener: Found ${contracts.length} contracts to index`);
     for (const contract of contracts) {
-      const { provider } = createRandomProvider(config.rpc[contract.chain] as unknown as Rpc[]);
+      const { provider } = createRandomProvider(config.rpc[contract.source] as unknown as Rpc[]);
       const contractAddress = `0x${contract.id}`;
       const ethersContract = new Contract(contractAddress, erc20, provider);
 
-      const cacheKey = getBlockNumberCacheKey(contract.chain);
+      const cacheKey = getBlockNumberCacheKey(contract.source);
       let currentBlockNumber: number = await cache.get(cacheKey) as number;
       if (!currentBlockNumber) {
         const result = await ResultAsync.fromPromise<number, Error>(
@@ -73,7 +73,7 @@ export class ERC20Listener extends Listener {
       const filter = ethersContract.filters!.Transfer!();
       const events = await ethersContract.queryFilter(filter, startBlock, endBlock);
       for (const event of this.sortEvents(events)) {
-        const result = await this.handleEvent(contract.chain, event);
+        const result = await this.handleEvent(contract.source, event);
         if (result.isErr()) {
           logger.error(`Failed to handle event`, { contract, error: result.error });
           return secondsFromNow(60);
