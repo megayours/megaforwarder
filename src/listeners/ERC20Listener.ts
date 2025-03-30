@@ -25,6 +25,7 @@ export class ERC20Listener extends Listener {
   private readonly _blockHeightIncrement: number;
   private readonly _throttleOnSuccessMs: number;
   private readonly _searchedBlockNumbers: Map<string, number>;
+
   constructor() {
     super(`erc20-listener`);
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
