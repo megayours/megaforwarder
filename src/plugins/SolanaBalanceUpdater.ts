@@ -19,6 +19,7 @@ import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import { SOLANA_THROTTLE_LIMIT } from "../util/constants";
 import { postchainConfig } from "../util/postchain-config";
+import { Metaplex, keypairIdentity } from "@metaplex-foundation/js";
 
 type SolanaBalanceUpdaterInput = {
   tokenMint: string;
@@ -63,6 +64,27 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     // Convert string addresses to PublicKeys
     const mintPubkey = new PublicKey(input.tokenMint);
     const userPubkey = new PublicKey(input.userAccount);
+
+    // Initialize Metaplex
+    const metaplex = Metaplex.make(connection);
+
+    // Fetch token metadata
+    let tokenName = "";
+    try {
+      const metadata = await metaplex.nfts().findByMint({ mintAddress: mintPubkey });
+      if (metadata && metadata.name) {
+        tokenName = metadata.name;
+        logger.debug(`Retrieved token name: ${tokenName}`);
+      } else {
+        logger.warn(`Could not find metadata or name for mint: ${mintPubkey.toString()}`);
+        // Fallback or default name if needed
+        tokenName = "Unknown Token"; 
+      }
+    } catch (error) {
+      logger.error(`Error fetching token metadata: ${JSON.stringify(error)}`);
+       // Fallback or default name if needed
+       tokenName = "Unknown Token";
+    }
 
     logger.debug(`Looking up token account for mint ${mintPubkey.toString()} and user ${userPubkey.toString()}`);
 
@@ -149,6 +171,8 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
 
     logger.debug(`Final retrieved token balance: ${balance}`);
     prepareTimer({ status: 'success' });
+    
+    
 
     const currentSlot = await executeThrottled<number>(
       "solana",
@@ -167,6 +191,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
         input.tokenMint,
         input.userAccount,
         BigInt(balance),
+        tokenName,
         input.decimals,
         currentSlot.value
       ]
