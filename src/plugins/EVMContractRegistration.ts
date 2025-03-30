@@ -8,7 +8,6 @@ import { ecdsaSign } from "secp256k1";
 import config from "../config";
 import { logger } from "../util/monitoring";
 import { postchainConfig } from "../util/postchain-config";
-import { hexToBuffer } from "../util/hex";
 import { validateAuth, type AccountSignature } from "../util/auth";
 
 type EVMContractRegistrationInput = {
@@ -53,9 +52,9 @@ export class EVMContractRegistration extends Plugin<EVMContractRegistrationInput
 
     const emptyGtx = gtx.emptyGtx(this._blockchainRid);
     
-    const tx = gtx.addTransactionToGtx("evm.register_contract", [
+    const tx = gtx.addTransactionToGtx("assets.register", [
       contract.chain,
-      hexToBuffer(contract.contract),
+      contract.contract,
       contract.blockNumber,
       contract.collection,
       contract.type

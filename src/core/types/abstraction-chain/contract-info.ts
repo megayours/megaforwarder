@@ -1,7 +1,7 @@
-export type ContractInfo = {
+export type AssetInfo = {
   chain: string;
-  contract: Buffer;
-  block_number: number;
-  collection: string;
+  id: string;
+  unit: number;
+  name: string;
   type: string;
 }

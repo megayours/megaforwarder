@@ -150,6 +150,16 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     logger.debug(`Final retrieved token balance: ${balance}`);
     prepareTimer({ status: 'success' });
 
+    const currentSlot = await executeThrottled<number>(
+      "solana",
+      () => connection.getSlot(),
+      SOLANA_THROTTLE_LIMIT
+    );
+
+    if (currentSlot.isErr()) {
+      return err({ type: "permanent_error", context: `Error getting current slot: ${currentSlot.error}` });
+    }
+
     // For a balance update, pass the token mint, user account, and current balance to the Chromia blockchain
     return ok({
       operation: "solana.spl.balance_update",
@@ -157,7 +167,8 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
         input.tokenMint,
         input.userAccount,
         BigInt(balance),
-        input.decimals
+        input.decimals,
+        currentSlot.value
       ]
     });
   }

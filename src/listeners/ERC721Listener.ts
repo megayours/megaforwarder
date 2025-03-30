@@ -2,19 +2,17 @@ import { Contract } from "ethers";
 import { Listener } from "../core/listener/Listener";
 import { logger } from "../util/monitoring";
 import { createClient } from "postchain-client";
-import { bufferToHex } from "../util/hex";
 import type { Log } from "ethers";
 import type { EventLog } from "ethers";
 import { ERC721Forwarder, type ERC721ForwarderInput } from "../plugins/ERC721Forwarder";
 import { Task } from "../core/task/Task";
 import config from "../config";
-import { err, ok, Result, ResultAsync } from "neverthrow";
-import { createCache, type Cache } from "cache-manager";
+import { ok, Result, ResultAsync } from "neverthrow";
 import { millisecondsFromNow, secondsFromNow } from "../util/time";
 import type { OracleError } from "../util/errors";
 import { createRandomProvider } from "../util/create-provider";
 import type { Rpc } from "../core/types/config/Rpc";
-import type { ContractInfo } from "../core/types/abstraction-chain/contract-info";
+import type { AssetInfo } from "../core/types/abstraction-chain/contract-info";
 import erc721 from "../util/abis/erc721";
 import cache from "../core/cache";
 import { getBlockNumberCacheKey } from "../util/cache-keys";
@@ -40,7 +38,7 @@ export class ERC721Listener extends Listener {
     logger.info(`ERC721Listener: Found ${contracts.length} contracts to index`);
     for (const contract of contracts) {
       const { provider } = createRandomProvider(config.rpc[contract.chain] as unknown as Rpc[]);
-      const contractAddress = `0x${bufferToHex(contract.contract)}`;
+      const contractAddress = `0x${contract.id}`;
       const ethersContract = new Contract(contractAddress, erc721, provider);
 
       const cacheKey = getBlockNumberCacheKey(contract.chain);
@@ -63,21 +61,21 @@ export class ERC721Listener extends Listener {
       logger.info(`ERC721Listener: Current block number`, { currentBlockNumber });
 
       const numberOfBlocksToLagBehind = 10;
-      if (contract.block_number + numberOfBlocksToLagBehind > currentBlockNumber) {
+      if (contract.unit + numberOfBlocksToLagBehind > currentBlockNumber) {
         logger.info(`Skipping contract ${contractAddress} because it is already indexed`, { contract });
         continue;
       }
 
       const lastSearchedBlockNumber = this._searchedBlockNumbers.get(contractAddress);
 
-      const startBlock = lastSearchedBlockNumber && lastSearchedBlockNumber > contract.block_number ? lastSearchedBlockNumber : contract.block_number;
+      const startBlock = lastSearchedBlockNumber && lastSearchedBlockNumber > contract.unit ? lastSearchedBlockNumber : contract.unit;
       const endBlock = Math.min(startBlock + this._blockHeightIncrement, currentBlockNumber);
 
       const filter = ethersContract.filters!.Transfer!();
       const events = await ethersContract.queryFilter(filter, startBlock, endBlock);
       logger.info(`ERC721Listener: Found ${events.length} events between blocks ${startBlock} and ${endBlock}`);
       for (const event of this.sortEvents(events)) {
-        const result = await this.handleEvent(contract.chain, contract.collection, event);
+        const result = await this.handleEvent(contract.chain, contract.name, event);
         if (result.isErr()) {
           logger.error(`Failed to handle event`, { contract, error: result.error });
           return secondsFromNow(60);
@@ -96,7 +94,7 @@ export class ERC721Listener extends Listener {
       blockchainRid: this._blockchainRid
     });
 
-    return client.query<ContractInfo[]>('evm.get_contracts_info', { type: "erc721" });
+    return client.query<AssetInfo[]>('assets.get_assets_info', { type: "erc721" });
   }
 
   private uniqueId(event: Log | EventLog) {
