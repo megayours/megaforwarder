@@ -27,14 +27,14 @@ type EventWrapper = {
 export class MocaStakeListener extends Listener {
   private readonly _directoryNodeUrlPool: string[];
   private readonly _blockchainRid: string;
-  private readonly _blockHeightIncrement: number;
+  private readonly _blockHeightIncrement: bigint;
   private readonly _throttleOnSuccessMs: number;
-  private readonly _searchedBlockNumbers: Map<string, number>;
+  private readonly _searchedBlockNumbers: Map<string, bigint>;
   constructor() {
     super(`moca-stake-listener`);
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
     this._blockchainRid = config.abstractionChain.blockchainRid;
-    this._blockHeightIncrement = this.config["blockHeightIncrement"] as number;
+    this._blockHeightIncrement = BigInt(this.config["blockHeightIncrement"] as number);
     this._throttleOnSuccessMs = this.config["throttleOnSuccessMs"] as number;
     this._searchedBlockNumbers = new Map();
   }
@@ -48,7 +48,7 @@ export class MocaStakeListener extends Listener {
       const ethersContract = new Contract(contractAddress, mocaStakeAbi, provider);
 
       const cacheKey = getBlockNumberCacheKey(contract.source);
-      let currentBlockNumber: number = await cache.get(cacheKey) as number;
+      let currentBlockNumber: bigint = await cache.get(cacheKey) as bigint;
       if (!currentBlockNumber) {
         const result = await ResultAsync.fromPromise<number, Error>(
           provider.getBlockNumber(),
@@ -60,11 +60,11 @@ export class MocaStakeListener extends Listener {
           return secondsFromNow(60);
         }
 
-        currentBlockNumber = result.value;
+        currentBlockNumber = BigInt(result.value);
         cache.set(cacheKey, currentBlockNumber, 1000 * 60);
       }
 
-      const numberOfBlocksToLagBehind = 10;
+      const numberOfBlocksToLagBehind = BigInt(10);
       if (contract.unit + numberOfBlocksToLagBehind > currentBlockNumber) {
         logger.info(`Skipping contract ${contractAddress} because it is already indexed`, { contract });
         continue;
@@ -73,7 +73,7 @@ export class MocaStakeListener extends Listener {
       const lastSearchedBlockNumber = this._searchedBlockNumbers.get(contractAddress);
 
       const startBlock = lastSearchedBlockNumber && lastSearchedBlockNumber > contract.unit ? lastSearchedBlockNumber : contract.unit;
-      const endBlock = Math.min(startBlock + this._blockHeightIncrement, currentBlockNumber);
+      const endBlock = BigInt(Math.min(Number(startBlock) + Number(this._blockHeightIncrement), Number(currentBlockNumber)));
 
       const stakedFilter = ethersContract.filters!.Staked!();
       const stakedEvents = await ethersContract.queryFilter(stakedFilter, startBlock, endBlock);

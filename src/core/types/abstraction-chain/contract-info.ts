@@ -1,7 +1,7 @@
 export type AssetInfo = {
   source: string;
   id: string;
-  unit: number;
+  unit: bigint;
   name: string;
   type: string;
 }
