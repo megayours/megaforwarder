@@ -45,7 +45,7 @@ export class AssetRegistration extends Plugin<AssetRegistrationInput, AssetRegis
     }
 
     // Validate the source and type combination
-    switch (input.type) {
+    switch (input.type.toLowerCase()) {
       case "erc20":
       case "erc721":
         if (input.source !== "ethereum" && input.source !== "polygon") {
@@ -80,7 +80,7 @@ export class AssetRegistration extends Plugin<AssetRegistrationInput, AssetRegis
       contract.asset,
       contract.unit,
       contract.name,
-      contract.type
+      contract.type.toLowerCase()
     ], emptyGtx);
 
     tx.signers = input.map((i) => Buffer.from(i.pubkey, "hex"));
