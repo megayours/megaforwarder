@@ -15,7 +15,7 @@ class ThrottleManager {
    * @param fn Function to throttle
    * @param maxCallsPerSecond Maximum calls per second (default: 3)
    */
-  async execute<T>(identifier: string, fn: () => Promise<T>, maxCallsPerSecond: number = 3): Promise<ResultAsync<T, OracleError>> {
+  async execute<T>(identifier: string, fn: () => Promise<T>, maxCallsPerSecond: number = 5): Promise<ResultAsync<T, OracleError>> {
     // Create a new throttler if one doesn't exist for this identifier
     if (!this.throttlers.has(identifier)) {
       this.throttlers.set(identifier, pThrottle({
