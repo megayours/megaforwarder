@@ -50,7 +50,7 @@ const heliusWebhook = async (req: Request) => {
   const header = req.headers;
   const authToken = header.get("Authorization");
 
-  if (authToken !== config.webhooks.helius.apiKey) {
+  if (authToken !== config.webhooks.helius.authKey) {
     return new Response("Unauthorized", { status: 401 });
   }
 
