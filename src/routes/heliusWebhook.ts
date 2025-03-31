@@ -145,7 +145,14 @@ const getTokenMints = async (): Promise<AssetInfo[]> => {
       // Update webhook with all assets from our blockchain
       const res = await fetch(`${config.webhooks.helius.url}/v0/webhooks/${config.webhooks.helius.webhookId}?api-key=${config.webhooks.helius.apiKey}`, {
         method: "PUT",
-        body: JSON.stringify({ accountAddresses: assets.map(asset => asset.id) })
+        body: JSON.stringify({ 
+          webhookURL: "https://oracle2.testnet.megayours.com/helius/webhook",
+          transactionTypes: [ "TRANSFER" ],
+          accountAddresses: assets.map(asset => asset.id),
+          webhookType: "enhanced",
+          txnStatus: "success",
+          authHeader: config.webhooks.helius.authKey
+        })
       });
 
       if (!res.ok) {
