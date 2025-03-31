@@ -116,8 +116,17 @@ const getTokenMints = async (): Promise<AssetInfo[]> => {
     });
     const assets = await client.query<AssetInfo[]>('assets.get_assets_info', { source: "solana", type: "spl" });
 
-    const heliusWebhookConfig = await fetch(`${config.webhooks.helius.url}/v0/webhooks/${config.webhooks.helius.webhookId}?api-key=${config.webhooks.helius.apiKey}`)
-      .then(res => res.json()) as { accountAddresses: string[] };
+    const webhookConfigRes = await fetch(`${config.webhooks.helius.url}/v0/webhooks/${config.webhooks.helius.webhookId}?api-key=${config.webhooks.helius.apiKey}`);
+
+    if (!webhookConfigRes.ok) {
+      logger.error(`Helius webhook: Failed to get config`, { 
+        status: webhookConfigRes.status,
+        body: await webhookConfigRes.text()
+      });
+      return [];
+    }
+
+    const heliusWebhookConfig = await webhookConfigRes.json() as { accountAddresses: string[] };
 
     logger.info(`Helius webhook: Config`, { heliusWebhookConfig });
 
