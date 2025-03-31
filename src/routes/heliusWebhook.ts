@@ -134,14 +134,21 @@ const getTokenMints = async (): Promise<AssetInfo[]> => {
       });
       
       // Update webhook with all assets from our blockchain
-      await fetch(`${config.webhooks.helius.url}/v0/webhooks/${config.webhooks.helius.webhookId}?api-key=${config.webhooks.helius.apiKey}`, {
+      const res = await fetch(`${config.webhooks.helius.url}/v0/webhooks/${config.webhooks.helius.webhookId}?api-key=${config.webhooks.helius.apiKey}`, {
         method: "PUT",
         body: JSON.stringify({ accountAddresses: assets.map(asset => asset.id) })
       });
-      
-      logger.info(`Helius webhook: Updated webhook with all assets`, { 
-        totalAssets: assets.length 
-      });
+
+      if (!res.ok) {
+        logger.error(`Helius webhook: Failed to update webhook with all assets`, { 
+          status: res.status,
+          body: await res.text()
+        });
+      } else {
+        logger.info(`Helius webhook: Updated webhook with all assets`, { 
+          totalAssets: assets.length 
+        });
+      }
     }
 
     return assets;
