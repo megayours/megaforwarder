@@ -107,7 +107,7 @@ export class MocaStakeListener extends Listener {
       blockchainRid: this._blockchainRid
     });
 
-    return client.query<AssetInfo[]>('assets.get_assets_info', { type: "custom_moca_stake" });
+    return client.query<AssetInfo[]>('assets.get_assets_info', { source: null, type: "custom_moca_stake" });
   }
 
   private uniqueId(event: Log | EventLog) {

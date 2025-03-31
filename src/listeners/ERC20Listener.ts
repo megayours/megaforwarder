@@ -162,7 +162,7 @@ export class ERC20Listener extends Listener {
         directoryNodeUrlPool: this._directoryNodeUrlPool,
         blockchainRid: this._blockchainRid
       });
-      return await client.query<AssetInfo[]>('assets.get_assets_info', { type: "erc20" });
+      return await client.query<AssetInfo[]>('assets.get_assets_info', { source: null, type: "erc20" });
     } catch (error) {
       logger.error(`ERC20Listener: Failed to get contracts from directory chain`, { error });
       return []; // Return empty array on error

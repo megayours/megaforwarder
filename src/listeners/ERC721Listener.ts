@@ -161,7 +161,7 @@ export class ERC721Listener extends Listener {
         directoryNodeUrlPool: this._directoryNodeUrlPool,
         blockchainRid: this._blockchainRid
       });
-      return await client.query<AssetInfo[]>('assets.get_assets_info', { type: "erc721" });
+      return await client.query<AssetInfo[]>('assets.get_assets_info', { source: null, type: "erc721" });
     } catch (error) {
       logger.error(`ERC721Listener: Failed to get contracts from directory chain`, { error });
       return []; // Return empty array on error
