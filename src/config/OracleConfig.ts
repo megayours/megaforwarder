@@ -6,6 +6,12 @@ import type { WebhookConfig } from '../core/types/config/Webhook';
 import yaml from 'yaml';
 import type { AuthConfig } from '../core/types/config/AuthConfig';
 
+// Define a type for listener-specific settings, including batchSize
+type ListenerSpecificConfig = {
+  [key: string]: unknown;
+  batchSize?: number; // Optional batch size per listener type
+};
+
 /**
  * Configuration for an oracle instance
  */
@@ -21,9 +27,12 @@ export type OracleConfigOptions = {
   rpc: Rpcs;
   webhooks: WebhookConfig;
   auth: AuthConfig;
-  listener: ListenerConfig;
+  /** General listener configuration (e.g., polling intervals) */
+  listener: ListenerConfig; // Keep this for general listener settings if any
+  /** Specific configurations for plugins */
   plugins: Record<string, Record<string, Record<string, unknown>>>;
-  listeners: Record<string, Record<string, Record<string, unknown>>>;
+  /** Specific configurations for listeners, now including batchSize */
+  listeners: Record<string, ListenerSpecificConfig>; // Updated type
   peers?: Peer[];
   peerTimeoutMs?: number;
   minSignaturesRequired?: number;
@@ -45,9 +54,9 @@ export class OracleConfig {
   rpc: Rpcs;
   webhooks: WebhookConfig;
   auth: AuthConfig;
-  listener: ListenerConfig;
+  listener: ListenerConfig; // General listener settings
   plugins: Record<string, Record<string, Record<string, unknown>>>;
-  listeners: Record<string, Record<string, Record<string, unknown>>>;
+  listeners: Record<string, ListenerSpecificConfig>; // Listener-specific settings
   peers: Peer[];
   peerTimeoutMs: number;
   minSignaturesRequired: number;
@@ -66,12 +75,12 @@ export class OracleConfig {
     this.rpc = options.rpc;
     this.webhooks = options.webhooks;
     this.auth = options.auth;
-    this.listener = options.listener;
+    this.listener = options.listener; // Assign general listener config
     this.plugins = options.plugins;
-    this.listeners = options.listeners;
+    this.listeners = options.listeners; // Assign specific listener config
     this.peers = options.peers || [];
     this.peerTimeoutMs = options.peerTimeoutMs || 30000; // 30 seconds default
-    this.minSignaturesRequired = options.minSignaturesRequired || 0; // Default to 2 signatures
+    this.minSignaturesRequired = options.minSignaturesRequired || 0; // Default to 0 signatures (adjust as needed)
   }
 
   /**
@@ -87,6 +96,9 @@ export class OracleConfig {
     } else {
       options = JSON.parse(fileContent) as OracleConfigOptions;
     }
+
+    // Ensure listeners object exists if not provided in the file
+    options.listeners = options.listeners ?? {};
 
     return new OracleConfig(options);
   }

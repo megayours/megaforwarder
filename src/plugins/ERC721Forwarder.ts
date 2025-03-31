@@ -19,11 +19,16 @@ import { EVM_THROTTLE_LIMIT } from "../util/constants";
 import { createRandomProvider } from "../util/create-provider";
 import type { Rpc } from "../core/types/config/Rpc";
 import { postchainConfig } from "../util/postchain-config";
+
+// Define input for a single event
 export type ERC721ForwarderInput = {
   chain: string;
   collection: string;
   event: Log | EventLog
 }
+
+// Update to allow array of inputs as the plugin input type
+export type BatchedERC721ForwarderInput = ERC721ForwarderInput[];
 
 type ERC721Event = {
   chain: string;
@@ -39,7 +44,7 @@ type ERC721Event = {
   collection: string | undefined;
 }
 
-export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, GTX, boolean> {
+export class ERC721Forwarder extends Plugin<BatchedERC721ForwarderInput, ERC721Event[], GTX, boolean> {
   static readonly pluginId = "erc721-forwarder";
 
   private readonly _directoryNodeUrlPool: string[];
@@ -51,180 +56,249 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
   }
 
-  async prepare(input: ERC721ForwarderInput): Promise<Result<ERC721Event, OracleError>> {
-    const timestamp = Date.now();
-    const { provider, token } = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
-
-    // Validate input event was actually an event
-    const contractAddress = input.event.address;
-    const transactionHash = input.event.transactionHash;
-    const blockNumber = input.event.blockNumber;
-    const logIndex = input.event.index;
-
-    // Check that transaction exists
-    const transaction = await executeThrottled<TransactionResponse | null>(
-      input.chain,
-      () => provider.getTransaction(transactionHash),
-      EVM_THROTTLE_LIMIT
-    );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
-    if (transaction.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
-
-    // Verify transaction was included in a block
-    if (transaction.value?.blockNumber === null) return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
-
-    // Get transaction receipt to access logs
-    const receipt = await executeThrottled<null | TransactionReceipt>(
-      input.chain,
-      () => provider.getTransactionReceipt(transactionHash),
-      EVM_THROTTLE_LIMIT
-    );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
-    if (receipt.isErr()) return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
-
-    // Verify that the transaction was successful
-    if (receipt.value?.status !== 1) return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
-
-    // Find the matching log in the receipt
-    const matchingLog = receipt.value?.logs.find((log: Log) =>
-      log.blockNumber === blockNumber &&
-      log.index === logIndex &&
-      log.address.toLowerCase() === contractAddress.toLowerCase()
-    );
-
-    if (!matchingLog) return err({ type: "prepare_error", context: `Log not found in transaction ${transactionHash} at block ${blockNumber}` });
-
-    // Additional verification: check that the topics/data match
-    if (input.event.topics.length !== matchingLog.topics.length ||
-      !input.event.topics.every((topic, i) => topic === matchingLog.topics[i]) ||
-      input.event.data !== matchingLog.data) {
-      return err({ type: "prepare_error", context: `Log does not match expected event` });
+  // Update prepare to handle a batch of events
+  async prepare(inputBatch: BatchedERC721ForwarderInput): Promise<Result<ERC721Event[], OracleError>> {
+    if (inputBatch.length === 0) {
+      return ok([]); // Return empty array if no inputs
     }
 
-    const from = this.safelyExtractAddress(matchingLog.topics[1]);
-    const to = this.safelyExtractAddress(matchingLog.topics[2]);
+    const preparedEvents: ERC721Event[] = [];
+    const timestamp = Date.now();
 
-    if (!from || !to) return err({ type: "prepare_error", context: `Invalid log topics` });
+    // Process each event in the batch
+    for (const input of inputBatch) {
+      const { provider, token } = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
 
-    const tokenIdString = matchingLog.topics[3];
-    if (!tokenIdString) return err({ type: "prepare_error", context: `Invalid log topics` });
-    const tokenId = BigInt(tokenIdString);
+      // Validate input event was actually an event
+      const contractAddress = input.event.address;
+      const transactionHash = input.event.transactionHash;
+      const blockNumber = input.event.blockNumber;
+      const logIndex = input.event.index;
 
-    let tokenUri: string | undefined;
-    let metadata: string | undefined;
-    if (this.isZeroAddress(from)) {
-      const contract = new Contract(contractAddress, erc721Abi, provider);
-      if (!contract.tokenURI) return err({ type: "prepare_error", context: `Token URI not found on contract` });
-
-      const tokenUriResult = await executeThrottled<string>(
+      // Check that transaction exists
+      const transaction = await executeThrottled<TransactionResponse | null>(
         input.chain,
-        () => contract.tokenURI!(tokenId),
+        () => provider.getTransaction(transactionHash),
         EVM_THROTTLE_LIMIT
       );
       rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
-
-      if (tokenUriResult.isErr()) {
-        return err({ type: "prepare_error", context: `Failed to get token URI` });
+      if (transaction.isErr()) {
+        logger.error(`Transaction ${transactionHash} not found`, { error: transaction.error });
+        continue; // Skip this event but continue processing others
       }
 
-      tokenUri = tokenUriResult.value;
-      const preparedTokenUri = this.routeViaGateway(tokenUri!);
-      const metadataTimestamp = Date.now();
-      const response = await fetch(preparedTokenUri);
-      const json = await response.json();
-      const metadataTimeTaken = Date.now() - metadataTimestamp;
-      if (metadataTimeTaken > 1000) {
-        logger.warn(`ERC721Forwarder took ${metadataTimeTaken}ms to fetch metadata`, { preparedTokenUri });
+      // Verify transaction was included in a block
+      if (transaction.value?.blockNumber === null) {
+        logger.error(`Transaction ${transactionHash} not included in a block`);
+        continue; // Skip this event but continue processing others
       }
-      metadata = JSON.stringify(json);
+
+      // Get transaction receipt to access logs
+      const receipt = await executeThrottled<null | TransactionReceipt>(
+        input.chain,
+        () => provider.getTransactionReceipt(transactionHash),
+        EVM_THROTTLE_LIMIT
+      );
+      rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
+      if (receipt.isErr()) {
+        logger.error(`Transaction ${transactionHash} receipt not found`, { error: receipt.error });
+        continue; // Skip this event but continue processing others
+      }
+
+      // Verify that the transaction was successful
+      if (receipt.value?.status !== 1) {
+        logger.error(`Transaction ${transactionHash} failed`);
+        continue; // Skip this event but continue processing others
+      }
+
+      // Find the matching log in the receipt
+      const matchingLog = receipt.value?.logs.find((log: Log) =>
+        log.blockNumber === blockNumber &&
+        log.index === logIndex &&
+        log.address.toLowerCase() === contractAddress.toLowerCase()
+      );
+
+      if (!matchingLog) {
+        logger.error(`Log not found in transaction ${transactionHash} at block ${blockNumber}`);
+        continue; // Skip this event but continue processing others
+      }
+
+      // Additional verification: check that the topics/data match
+      if (input.event.topics.length !== matchingLog.topics.length ||
+        !input.event.topics.every((topic, i) => topic === matchingLog.topics[i]) ||
+        input.event.data !== matchingLog.data) {
+        logger.error(`Log does not match expected event`);
+        continue; // Skip this event but continue processing others
+      }
+
+      const from = this.safelyExtractAddress(matchingLog.topics[1]);
+      const to = this.safelyExtractAddress(matchingLog.topics[2]);
+
+      if (!from || !to) {
+        logger.error(`Invalid log topics`);
+        continue; // Skip this event but continue processing others
+      }
+
+      const tokenIdString = matchingLog.topics[3];
+      if (!tokenIdString) {
+        logger.error(`Invalid log topics`);
+        continue; // Skip this event but continue processing others
+      }
+      const tokenId = BigInt(tokenIdString);
+
+      let tokenUri: string | undefined;
+      let metadata: string | undefined;
+      if (this.isZeroAddress(from)) {
+        const contract = new Contract(contractAddress, erc721Abi, provider);
+        if (!contract.tokenURI) {
+          logger.error(`Token URI not found on contract`);
+          continue; // Skip this event but continue processing others
+        }
+
+        const tokenUriResult = await executeThrottled<string>(
+          input.chain,
+          () => contract.tokenURI!(tokenId),
+          EVM_THROTTLE_LIMIT
+        );
+        rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
+
+        if (tokenUriResult.isErr()) {
+          logger.error(`Failed to get token URI`, { error: tokenUriResult.error });
+          continue; // Skip this event but continue processing others
+        }
+
+        tokenUri = tokenUriResult.value;
+        const preparedTokenUri = this.routeViaGateway(tokenUri!);
+        const metadataTimestamp = Date.now();
+        try {
+          const response = await fetch(preparedTokenUri);
+          const json = await response.json();
+          const metadataTimeTaken = Date.now() - metadataTimestamp;
+          if (metadataTimeTaken > 1000) {
+            logger.warn(`ERC721Forwarder took ${metadataTimeTaken}ms to fetch metadata`, { preparedTokenUri });
+          }
+          metadata = JSON.stringify(json);
+        } catch (error) {
+          logger.error(`Failed to fetch metadata from ${preparedTokenUri}`, { error });
+          // Even if metadata fetch fails, we can still process the event
+          // Just leave metadata as undefined
+        }
+      }
+
+      // Add successfully prepared event to the array
+      preparedEvents.push({
+        chain: input.chain,
+        blockNumber,
+        transactionHash,
+        logIndex,
+        contractAddress,
+        tokenId,
+        from,
+        to,
+        metadata,
+        tokenUri,
+        collection: input.collection
+      });
     }
 
     const timeTaken = Date.now() - timestamp;
     if (timeTaken > 5000) {
-      logger.warn(`ERC721Forwarder took ${timeTaken}ms to prepare`, { input });
+      logger.warn(`ERC721Forwarder took ${timeTaken}ms to prepare ${preparedEvents.length}/${inputBatch.length} events`);
     }
 
-    return ok({
-      chain: input.chain,
-      blockNumber,
-      transactionHash,
-      logIndex,
-      contractAddress,
-      tokenId,
-      from,
-      to,
-      metadata,
-      tokenUri: tokenUri,
-      collection: input.collection
-    });
+    return ok(preparedEvents);
   }
 
-  async process(input: ProcessInput<ERC721Event>[]): Promise<Result<GTX, OracleError>> {
+  // Update process to handle multiple prepared events
+  async process(inputs: ProcessInput<ERC721Event[]>[]): Promise<Result<GTX, OracleError>> {
+    // Create an empty GTX
     const emptyGtx = gtx.emptyGtx(this._blockchainRid);
-    const selectedInput = input[Math.floor(Math.random() * input.length)];
-    if (!selectedInput) return err({ type: "process_error", context: `No input data` });
-
-    const eventId = `${selectedInput.data.transactionHash}-${selectedInput.data.logIndex}`;
+    
+    // Use the first input from any peer
+    const selectedInput = inputs[0];
+    if (!selectedInput || selectedInput.data.length === 0) {
+      return err({ type: "process_error", context: `No input data received` });
+    }
 
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._blockchainRid.toString('hex')
-    })
+    });
 
-    const alreadyProcessed = await ResultAsync.fromPromise(client.query('evm.is_event_processed', {
-      contract: Buffer.from(selectedInput.data.contractAddress.replace('0x', ''), 'hex'),
-      event_id: eventId
-    }), (error) => error);
+    // Initialize the transaction with our empty GTX
+    let tx = emptyGtx;
+    let processedAny = false;
 
-    if (alreadyProcessed.isErr()) {
-      return err({ type: "process_error", context: `Failed to check if event is already processed` });
+    // For each prepared event in the batch
+    for (const event of selectedInput.data) {
+      const eventId = `${event.transactionHash}-${event.logIndex}`;
+
+      // Check if this event was already processed to avoid duplicates
+      const alreadyProcessed = await ResultAsync.fromPromise(client.query('evm.is_event_processed', {
+        contract: Buffer.from(event.contractAddress.replace('0x', ''), 'hex'),
+        event_id: eventId
+      }), (error) => error);
+
+      if (alreadyProcessed.isErr()) {
+        logger.error(`Failed to check if event is already processed`, { eventId, error: alreadyProcessed.error });
+        continue; // Skip this event but continue processing others
+      }
+
+      if (alreadyProcessed.value) {
+        logger.info(`Event already processed, skipping`, { eventId });
+        continue; // Skip this event but continue processing others
+      }
+
+      // Add the appropriate operation based on whether this is a mint or transfer
+      if (event.metadata && event.tokenUri) {
+        logger.info(`Processing ERC721 mint`, {
+          eventId,
+          contractAddress: event.contractAddress,
+          tokenId: event.tokenId,
+        });
+        tx = gtx.addTransactionToGtx('evm.erc721.mint', [
+          event.chain,
+          event.blockNumber,
+          hexToBuffer(event.contractAddress),
+          eventId,
+          event.tokenId,
+          hexToBuffer(event.to),
+          event.metadata,
+          event.tokenUri,
+          event.collection ?? null
+        ], tx);
+        processedAny = true;
+      } else {
+        logger.info(`Processing ERC721 transfer`, {
+          eventId,
+          contractAddress: event.contractAddress,
+          tokenId: event.tokenId,
+        });
+        tx = gtx.addTransactionToGtx('evm.erc721.transfer', [
+          event.chain,
+          event.blockNumber,
+          hexToBuffer(event.contractAddress),
+          eventId,
+          event.tokenId,
+          hexToBuffer(event.from),
+          hexToBuffer(event.to),
+        ], tx);
+        processedAny = true;
+      }
     }
 
-    if (alreadyProcessed.value) {
-      return err({ type: "non_error", context: `Event already processed` });
+    // If we didn't process any events, return a non-error
+    if (!processedAny) {
+      return err({ type: "non_error", context: "All events in batch were already processed" });
     }
 
-    let tx: GTX;
-    if (selectedInput.data.metadata && selectedInput.data.tokenUri) {
-      logger.info(`Processing ERC721 mint`, {
-        eventId,
-        contractAddress: selectedInput.data.contractAddress,
-        tokenId: selectedInput.data.tokenId,
-      });
-      tx = gtx.addTransactionToGtx('evm.erc721.mint', [
-        selectedInput.data.chain,
-        selectedInput.data.blockNumber,
-        hexToBuffer(selectedInput.data.contractAddress),
-        eventId,
-        selectedInput.data.tokenId,
-        hexToBuffer(selectedInput.data.to),
-        selectedInput.data.metadata,
-        selectedInput.data.tokenUri,
-        selectedInput.data.collection ?? null
-      ], emptyGtx);
-    } else {
-      logger.info(`Processing ERC721 transfer`, {
-        eventId,
-        contractAddress: selectedInput.data.contractAddress,
-        tokenId: selectedInput.data.tokenId,
-      });
-      tx = gtx.addTransactionToGtx('evm.erc721.transfer', [
-        selectedInput.data.chain,
-        selectedInput.data.blockNumber,
-        hexToBuffer(selectedInput.data.contractAddress),
-        eventId,
-        selectedInput.data.tokenId,
-        hexToBuffer(selectedInput.data.from),
-        hexToBuffer(selectedInput.data.to),
-      ], emptyGtx);
-    }
-
-    tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
+    // Set the signers from all inputs
+    tx.signers = inputs.map((i) => Buffer.from(i.pubkey, 'hex'));
 
     return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: ERC721Event): Promise<Result<GTX, OracleError>> {
+  async validate(gtx: GTX, preparedData: ERC721Event[]): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -239,7 +313,7 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
   }
 
   async execute(_gtx: GTX): Promise<Result<boolean, OracleError>> {
-    logger.debug(`Executing GTX`);
+    logger.debug(`Executing GTX with ${_gtx.operations.length} operations`);
     const client = await createClient({
       ...postchainConfig,
       directoryNodeUrlPool: this._directoryNodeUrlPool,
@@ -248,8 +322,9 @@ export class ERC721Forwarder extends Plugin<ERC721ForwarderInput, ERC721Event, G
 
     try {
       await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.Dapp);
-      logger.info(`Executed successfully`);
-      txProcessedTotal.inc({ type: "erc721" });
+      logger.info(`Executed ${_gtx.operations.length} operations successfully`);
+      // Increment the metric for each operation
+      txProcessedTotal.inc({ type: "erc721" }, _gtx.operations.length);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
       if (error.status === 409) {

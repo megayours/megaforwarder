@@ -7,7 +7,7 @@ import type { Log } from "ethers";
 import type { EventLog } from "ethers";
 import { Task } from "../core/task/Task";
 import config from "../config";
-import { ok, Result, ResultAsync } from "neverthrow";
+import { ok, err, Result, ResultAsync } from "neverthrow";
 import { millisecondsFromNow, secondsFromNow } from "../util/time";
 import type { OracleError } from "../util/errors";
 import { createRandomProvider } from "../util/create-provider";
@@ -19,32 +19,52 @@ import type { ERC20ForwarderInput } from "../plugins/ERC20Forwarder";
 import cache from "../core/cache";
 import { getBlockNumberCacheKey } from "../util/cache-keys";
 
+// Define the structure for a single event input
+type SingleERC20ForwarderInput = {
+  chain: string;
+  event: Log | EventLog;
+};
+
+// Define the batched input structure
+type BatchedERC20ForwarderInput = SingleERC20ForwarderInput[];
+
 export class ERC20Listener extends Listener {
   private readonly _directoryNodeUrlPool: string[];
   private readonly _blockchainRid: string;
   private readonly _blockHeightIncrement: number;
   private readonly _throttleOnSuccessMs: number;
   private readonly _searchedBlockNumbers: Map<string, number>;
+  private readonly _batchSize: number; // New property for batch size
 
   constructor() {
     super(`erc20-listener`);
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
     this._blockchainRid = config.abstractionChain.blockchainRid;
-    this._blockHeightIncrement = this.config["blockHeightIncrement"] as number;
-    this._throttleOnSuccessMs = this.config["throttleOnSuccessMs"] as number;
+    // Access listener-specific config
+    const listenerConfig = config.listeners[this.id] ?? {};
+    this._blockHeightIncrement = (listenerConfig["blockHeightIncrement"] as number) ?? 100; // Default value
+    this._throttleOnSuccessMs = (listenerConfig["throttleOnSuccessMs"] as number) ?? 5000; // Default value
+    this._batchSize = (listenerConfig["batchSize"] as number) ?? 1; // Default batch size is 1
     this._searchedBlockNumbers = new Map();
+    logger.info(`ERC20Listener initialized with batch size ${this._batchSize}`);
   }
   
   async run() {
     const contracts = await this.getContracts();
+    if (contracts.length === 0) {
+      logger.info(`ERC20Listener: No ERC20 contracts found to index`);
+      return millisecondsFromNow(this._throttleOnSuccessMs * 5); // Wait longer if no contracts
+    }
     logger.info(`ERC20Listener: Found ${contracts.length} contracts to index`);
+    
     for (const contract of contracts) {
       const { provider } = createRandomProvider(config.rpc[contract.source] as unknown as Rpc[]);
       const contractAddress = `0x${contract.id}`;
       const ethersContract = new Contract(contractAddress, erc20, provider);
 
+      // --- Block Number Management ---
       const cacheKey = getBlockNumberCacheKey(contract.source);
-      let currentBlockNumber: number = await cache.get(cacheKey) as number;
+      let currentBlockNumber: number | undefined = await cache.get(cacheKey) as number | undefined;
       if (!currentBlockNumber) {
         const result = await ResultAsync.fromPromise<number, Error>(
           provider.getBlockNumber(),
@@ -52,55 +72,108 @@ export class ERC20Listener extends Listener {
         );
         
         if (result.isErr()) {
-          logger.error(`Failed to get current block number`, { contract, error: result.error });
-          return secondsFromNow(60);
+          logger.error(`Failed to get current block number`, { contract: contractAddress, chain: contract.source, error: result.error });
+          // Continue to next contract if block number fetch fails for one
+          continue;
         }
 
         currentBlockNumber = result.value;
-        cache.set(cacheKey, currentBlockNumber, 1000 * 60);
+        // Cache for 1 minute
+        await cache.set(cacheKey, currentBlockNumber, 60);
       }
 
-      const numberOfBlocksToLagBehind = 10;
-      if (contract.unit + numberOfBlocksToLagBehind > currentBlockNumber) {
-        logger.info(`Skipping contract ${contractAddress} because it is already indexed`, { contract });
+      logger.info(`ERC20Listener: Current block number for chain ${contract.source}`, { currentBlockNumber });
+
+      const numberOfBlocksToLagBehind = 10; // Configurable?
+      const effectiveCurrentBlock = currentBlockNumber - numberOfBlocksToLagBehind;
+
+      if (contract.unit >= effectiveCurrentBlock) {
+        logger.info(`Skipping contract ${contractAddress} on chain ${contract.source} as it is already indexed up to or beyond the safe lag block`, { contractUnit: contract.unit, effectiveCurrentBlock });
         continue;
       }
 
       const lastSearchedBlockNumber = this._searchedBlockNumbers.get(contractAddress);
+      const startBlock = Math.max(
+        lastSearchedBlockNumber ? lastSearchedBlockNumber + 1 : 0, // Start from next block if previously searched
+        contract.unit // Don't search before the contract's starting unit
+      );
+      const endBlock = Math.min(startBlock + this._blockHeightIncrement -1, effectiveCurrentBlock); // -1 because query is inclusive
 
-      const startBlock = lastSearchedBlockNumber && lastSearchedBlockNumber > contract.unit ? lastSearchedBlockNumber : contract.unit;
-      const endBlock = Math.min(startBlock + this._blockHeightIncrement, currentBlockNumber);
+      if (startBlock > endBlock) {
+        logger.info(`Skipping contract ${contractAddress} on chain ${contract.source} as startBlock ${startBlock} is greater than endBlock ${endBlock}. Likely caught up.`, { lastSearchedBlockNumber, contractUnit: contract.unit, effectiveCurrentBlock });
+        continue;
+      }
 
+      // --- Event Fetching and Batching ---
+      logger.info(`ERC20Listener: Querying events for ${contractAddress} between blocks ${startBlock} and ${endBlock}`);
       const filter = ethersContract.filters!.Transfer!();
-      const events = await ethersContract.queryFilter(filter, startBlock, endBlock);
-      for (const event of this.sortEvents(events)) {
-        const result = await this.handleEvent(contract.source, event);
-        if (result.isErr()) {
-          logger.error(`Failed to handle event`, { contract, error: result.error });
-          return secondsFromNow(60);
+      let events: Array<Log | EventLog> = [];
+      try {
+        events = await ethersContract.queryFilter(filter, startBlock, endBlock);
+      } catch (error) {
+        logger.error(`ERC20Listener: Failed to query events for ${contractAddress}`, { error, startBlock, endBlock });
+        // Potentially add retry logic or just continue to next contract
+        continue; // Skip this contract for this run if query fails
+      }
+
+      logger.info(`ERC20Listener: Found ${events.length} events for ${contractAddress} between blocks ${startBlock} and ${endBlock}`);
+
+      if (events.length > 0) {
+        const sortedEvents = this.sortEvents(events);
+        const eventBatch: SingleERC20ForwarderInput[] = [];
+
+        for (const event of sortedEvents) {
+          eventBatch.push({ chain: contract.source, event });
+
+          if (eventBatch.length >= this._batchSize) {
+            const result = await this.handleBatch(eventBatch);
+            if (result.isErr()) {
+              logger.error(`Failed to handle batch`, { contract: contractAddress, error: result.error });
+              // Decide how to handle partial failure: Stop processing this contract? Return error?
+              // For now, log error and stop processing this contract for this run.
+              this._searchedBlockNumbers.set(contractAddress, event.blockNumber -1); // Record up to the block *before* the failed batch started
+              return secondsFromNow(60); // Retry sooner on error
+            }
+            eventBatch.length = 0; // Clear the batch
+          }
+        }
+
+        // Handle any remaining events in the last partial batch
+        if (eventBatch.length > 0) {
+          const result = await this.handleBatch(eventBatch);
+          if (result.isErr()) {
+            logger.error(`Failed to handle final batch`, { contract: contractAddress, error: result.error });
+            this._searchedBlockNumbers.set(contractAddress, startBlock -1); // Record up to the block *before* this range if final batch fails
+            return secondsFromNow(60); // Retry sooner on error
+          }
         }
       }
 
+      // Update last searched block number only if all batches were handled successfully for this range
       this._searchedBlockNumbers.set(contractAddress, endBlock);
     }
 
     return millisecondsFromNow(this._throttleOnSuccessMs);
   }
 
-  private async getContracts() {
-    const client = await createClient({
-      directoryNodeUrlPool: this._directoryNodeUrlPool,
-      blockchainRid: this._blockchainRid
-    });
-
-    return client.query<AssetInfo[]>('assets.get_assets_info', { type: "erc20" });
+  private async getContracts(): Promise<AssetInfo[]> {
+    try {
+      const client = await createClient({
+        directoryNodeUrlPool: this._directoryNodeUrlPool,
+        blockchainRid: this._blockchainRid
+      });
+      return await client.query<AssetInfo[]>('assets.get_assets_info', { type: "erc20" });
+    } catch (error) {
+      logger.error(`ERC20Listener: Failed to get contracts from directory chain`, { error });
+      return []; // Return empty array on error
+    }
   }
 
-  private uniqueId(event: Log | EventLog) {
+  private uniqueId(event: Log | EventLog): string {
     return `${event.transactionHash}-${event.index}`;
   }
 
-  private sortEvents(events: Log[] | EventLog[]) {
+  private sortEvents(events: Log[] | EventLog[]): (Log | EventLog)[] {
     return events.sort((a, b) => {
       if (a.blockNumber !== b.blockNumber) {
         return a.blockNumber - b.blockNumber;
@@ -109,16 +182,37 @@ export class ERC20Listener extends Listener {
     });
   }
 
-  private async handleEvent(chain: string, event: Log | EventLog): Promise<Result<boolean, OracleError>> {
-    const input: ERC20ForwarderInput = { chain, event };
-    const task = new Task(ERC20Forwarder.pluginId, input);
+  // New method to handle a batch of events
+  private async handleBatch(batch: BatchedERC20ForwarderInput): Promise<Result<boolean, OracleError>> {
+    if (batch.length === 0) {
+      return ok(true); // Nothing to process
+    }
+    
+    // Add null checks for the first and last items in the batch
+    const firstEvent = batch[0];
+    const lastEvent = batch[batch.length - 1];
+    
+    if (!firstEvent || !lastEvent) {
+      logger.error(`ERC20Listener: Invalid batch with missing events`);
+      return err({ type: "prepare_error", context: "Invalid batch with missing events" });
+    }
+    
+    const firstEventId = this.uniqueId(firstEvent.event);
+    const lastEventId = this.uniqueId(lastEvent.event);
+    
+    logger.info(`ERC20Listener: Handling batch of ${batch.length} events (from ${firstEventId} to ${lastEventId})`);
+
+    // The Task now takes the entire batch as input
+    const task = new Task<BatchedERC20ForwarderInput>(ERC20Forwarder.pluginId, batch);
     const result = await task.start();
+
     if (result.isErr()) {
+      // Check for non-error (e.g., all events in batch already processed)
       if (result.error.type === "non_error") {
-        logger.info(`Skipping event ${this.uniqueId(event)} because it was marked as a non-error`, { event });
+        logger.info(`Skipping batch (from ${firstEventId} to ${lastEventId}) because it was marked as a non-error`, { count: batch.length });
         return ok(true);
       }
-      
+      // Return the actual error
       return result;
     }
     return ok(result.value);

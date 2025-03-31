@@ -19,10 +19,14 @@ import { createRandomProvider } from "../util/create-provider";
 import type { Rpc } from "../core/types/config/Rpc";
 import { postchainConfig } from "../util/postchain-config";
 
+// Define input for a single ERC20 event
 export type ERC20ForwarderInput = {
   chain: string;
   event: Log | EventLog
 }
+
+// Update to allow an array of inputs as the plugin input type
+export type BatchedERC20ForwarderInput = ERC20ForwarderInput[];
 
 type ERC20Event = {
   chain: string;
@@ -39,7 +43,7 @@ type ERC20Event = {
     | { isMint: false; decimals?: undefined; name?: undefined; symbol?: undefined }
   );
 
-export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX, boolean> {
+export class ERC20Forwarder extends Plugin<BatchedERC20ForwarderInput, ERC20Event[], GTX, boolean> {
   static readonly pluginId = "erc20-forwarder";
 
   private readonly _directoryNodeUrlPool: string[];
@@ -51,174 +55,247 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
     this._blockchainRid = Buffer.from(config.abstractionChain.blockchainRid, 'hex');
   }
 
-  async prepare(input: ERC20ForwarderInput): Promise<Result<ERC20Event, OracleError>> {
-    const { provider, token } = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
-
-    // Validate input event was actually an event
-    const contractAddress = input.event.address;
-    const transactionHash = input.event.transactionHash;
-    const blockNumber = input.event.blockNumber;
-    const logIndex = input.event.index;
-
-    // Check that transaction exists
-    const transaction = await executeThrottled<TransactionResponse | null>(
-      input.chain,
-      () => provider.getTransaction(transactionHash),
-      EVM_THROTTLE_LIMIT
-    );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
-    if (transaction.isErr()) {
-      return err({ type: "prepare_error", context: `Transaction ${transactionHash} not found` });
+  // Update prepare to handle a batch of events
+  async prepare(inputBatch: BatchedERC20ForwarderInput): Promise<Result<ERC20Event[], OracleError>> {
+    if (inputBatch.length === 0) {
+      return ok([]); // Return empty array if no inputs
     }
 
-    // Verify transaction was included in a block
-    if (transaction.value?.blockNumber === null) {
-      return err({ type: "prepare_error", context: `Transaction ${transactionHash} not included in a block` });
+    const preparedEvents: ERC20Event[] = [];
+    const timestamp = Date.now();
+
+    // Process each event in the batch
+    for (const input of inputBatch) {
+      const { provider, token } = createRandomProvider(config.rpc[input.chain] as unknown as Rpc[]);
+
+      // Validate input event was actually an event
+      const contractAddress = input.event.address;
+      const transactionHash = input.event.transactionHash;
+      const blockNumber = input.event.blockNumber;
+      const logIndex = input.event.index;
+
+      // Check that transaction exists
+      const transaction = await executeThrottled<TransactionResponse | null>(
+        input.chain,
+        () => provider.getTransaction(transactionHash),
+        EVM_THROTTLE_LIMIT
+      );
+      rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
+      if (transaction.isErr()) {
+        logger.error(`Transaction ${transactionHash} not found`, { error: transaction.error });
+        continue; // Skip this event but continue processing others
+      }
+
+      // Verify transaction was included in a block
+      if (transaction.value?.blockNumber === null) {
+        logger.error(`Transaction ${transactionHash} not included in a block`);
+        continue; // Skip this event but continue processing others
+      }
+
+      // Get transaction receipt to access logs
+      const receipt = await executeThrottled<null | TransactionReceipt>(
+        input.chain,
+        () => provider.getTransactionReceipt(transactionHash),
+        EVM_THROTTLE_LIMIT
+      );
+      rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
+      if (receipt.isErr()) {
+        logger.error(`Transaction ${transactionHash} receipt not found`, { error: receipt.error });
+        continue; // Skip this event but continue processing others
+      }
+
+      // Verify that the transaction was successful
+      if (receipt.value?.status !== 1) {
+        logger.error(`Transaction ${transactionHash} failed`);
+        continue; // Skip this event but continue processing others
+      }
+
+      // Find the matching log in the receipt
+      const matchingLog = receipt.value?.logs.find((log: Log) =>
+        log.blockNumber === blockNumber &&
+        log.index === logIndex &&
+        log.address.toLowerCase() === contractAddress.toLowerCase()
+      );
+
+      if (!matchingLog) {
+        logger.error(`Log not found in transaction ${transactionHash} at block ${blockNumber}`);
+        continue; // Skip this event but continue processing others
+      }
+
+      // Additional verification: check that the topics/data match
+      if (input.event.topics.length !== matchingLog.topics.length ||
+        !input.event.topics.every((topic, i) => topic === matchingLog.topics[i]) ||
+        input.event.data !== matchingLog.data) {
+        logger.error(`Log does not match expected event`);
+        continue; // Skip this event but continue processing others
+      }
+
+      const from = this.safelyExtractAddress(matchingLog.topics[1]);
+      const to = this.safelyExtractAddress(matchingLog.topics[2]);
+
+      if (!from || !to) {
+        logger.error(`Invalid log topics`);
+        continue; // Skip this event but continue processing others
+      }
+
+      const amount = BigInt(matchingLog.data);
+      const isMint = this.isZeroAddress(from);
+
+      if (isMint) {
+        const contract = new ethers.Contract(contractAddress, erc20Abi, provider);
+        const [decimalsResult, nameResult, symbolResult] = await Promise.all([
+          executeThrottled<number>(input.chain, () => contract.decimals!(), EVM_THROTTLE_LIMIT),
+          executeThrottled<string>(input.chain, () => contract.name!(), EVM_THROTTLE_LIMIT),
+          executeThrottled<string>(input.chain, () => contract.symbol!(), EVM_THROTTLE_LIMIT)
+        ]);
+        rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 3);
+
+        if (decimalsResult.isErr()) {
+          logger.error(`Failed to get decimals`, { error: decimalsResult.error });
+          continue; // Skip this event but continue processing others
+        }
+        if (nameResult.isErr()) {
+          logger.error(`Failed to get name`, { error: nameResult.error });
+          continue; // Skip this event but continue processing others
+        }
+        if (symbolResult.isErr()) {
+          logger.error(`Failed to get symbol`, { error: symbolResult.error });
+          continue; // Skip this event but continue processing others
+        }
+
+        // Add successfully prepared mint event to the array
+        preparedEvents.push({
+          chain: input.chain,
+          blockNumber,
+          transactionHash,
+          logIndex,
+          contractAddress,
+          from,
+          to,
+          amount,
+          isMint: true,
+          decimals: Number(decimalsResult.value),
+          name: nameResult.value,
+          symbol: symbolResult.value
+        });
+      } else {
+        // Add successfully prepared transfer event to the array
+        preparedEvents.push({
+          chain: input.chain,
+          blockNumber,
+          transactionHash,
+          logIndex,
+          contractAddress,
+          from,
+          to,
+          amount,
+          isMint: false
+        });
+      }
     }
 
-    // Get transaction receipt to access logs
-    const receipt = await executeThrottled<null | TransactionReceipt>(
-      input.chain,
-      () => provider.getTransactionReceipt(transactionHash),
-      EVM_THROTTLE_LIMIT
-    );
-    rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress, token });
-    if (receipt.isErr()) {
-      return err({ type: "prepare_error", context: `Transaction ${transactionHash} receipt not found` });
+    const timeTaken = Date.now() - timestamp;
+    if (timeTaken > 5000) {
+      logger.warn(`ERC20Forwarder took ${timeTaken}ms to prepare ${preparedEvents.length}/${inputBatch.length} events`);
     }
 
-    // Verify that the transaction was successful
-    if (receipt.value?.status !== 1) {
-      return err({ type: "prepare_error", context: `Transaction ${transactionHash} failed` });
-    }
-
-    // Find the matching log in the receipt
-    const matchingLog = receipt.value?.logs.find((log: Log) =>
-      log.blockNumber === blockNumber &&
-      log.index === logIndex &&
-      log.address.toLowerCase() === contractAddress.toLowerCase()
-    );
-
-    if (!matchingLog) {
-      return err({ type: "prepare_error", context: `Log not found in transaction ${transactionHash} at block ${blockNumber}` });
-    }
-
-    // Additional verification: check that the topics/data match
-    if (input.event.topics.length !== matchingLog.topics.length ||
-      !input.event.topics.every((topic, i) => topic === matchingLog.topics[i]) ||
-      input.event.data !== matchingLog.data) {
-      return err({ type: "prepare_error", context: `Log does not match expected event` });
-    }
-
-    const from = this.safelyExtractAddress(matchingLog.topics[1]);
-    const to = this.safelyExtractAddress(matchingLog.topics[2]);
-
-    if (!from || !to) return err({ type: "prepare_error", context: `Invalid log topics` });
-
-    const amount = BigInt(matchingLog.data);
-    const isMint = this.isZeroAddress(from);
-
-    if (isMint) {
-      const contract = new ethers.Contract(contractAddress, erc20Abi, provider);
-      const [decimals, name, symbol] = await Promise.all([
-        executeThrottled<number>(input.chain, () => contract.decimals!(), EVM_THROTTLE_LIMIT),
-        executeThrottled<string>(input.chain, () => contract.name!(), EVM_THROTTLE_LIMIT),
-        executeThrottled<string>(input.chain, () => contract.symbol!(), EVM_THROTTLE_LIMIT)
-      ]);
-      rpcCallsTotal.inc({ chain: input.chain, chain_code: contractAddress }, 3);
-
-      if (decimals.isErr()) return err({ type: "prepare_error", context: `Failed to get decimals` });
-      if (name.isErr()) return err({ type: "prepare_error", context: `Failed to get name` });
-      if (symbol.isErr()) return err({ type: "prepare_error", context: `Failed to get symbol` });
-
-      return ok({
-        chain: input.chain,
-        blockNumber,
-        transactionHash,
-        logIndex,
-        contractAddress,
-        from,
-        to,
-        amount,
-        isMint: true,
-        decimals: Number(decimals.value),
-        name: name.value,
-        symbol: symbol.value
-      });
-    } else {
-      return ok({
-        chain: input.chain,
-        blockNumber,
-        transactionHash,
-        logIndex,
-        contractAddress,
-        from,
-        to,
-        amount,
-        isMint: false
-      });
-    }
+    return ok(preparedEvents);
   }
 
-  async process(input: ProcessInput<ERC20Event>[]): Promise<Result<GTX, OracleError>> {
+  // Update process to handle multiple prepared events
+  async process(inputs: ProcessInput<ERC20Event[]>[]): Promise<Result<GTX, OracleError>> {
+    // Create an empty GTX
     const emptyGtx = gtx.emptyGtx(this._blockchainRid);
-    const selectedInput = input[Math.floor(Math.random() * input.length)];
-    if (!selectedInput) return err({ type: "process_error", context: `No input data received` });
-
-    const eventId = `${selectedInput.data.transactionHash}-${selectedInput.data.logIndex}`;
+    
+    // Use the first input from any peer
+    const selectedInput = inputs[0];
+    if (!selectedInput || selectedInput.data.length === 0) {
+      return err({ type: "process_error", context: `No input data received` });
+    }
 
     const client = await createClient({
       directoryNodeUrlPool: this._directoryNodeUrlPool,
       blockchainRid: this._blockchainRid.toString('hex')
-    })
+    });
 
-    const alreadyProcessed = await ResultAsync.fromPromise(client.query('evm.is_event_processed', {
-      contract: Buffer.from(selectedInput.data.contractAddress.replace('0x', ''), 'hex'),
-      event_id: eventId
-    }), (error) => error);
+    // Initialize the transaction with our empty GTX
+    let tx = emptyGtx;
+    let processedAny = false;
 
-    if (alreadyProcessed.isErr()) {
-      return err({ type: "process_error", context: `Failed to check if event is already processed` });
+    // For each prepared event in the batch
+    for (const event of selectedInput.data) {
+      const eventId = `${event.transactionHash}-${event.logIndex}`;
+
+      // Check if this event was already processed to avoid duplicates
+      const alreadyProcessed = await ResultAsync.fromPromise(client.query('evm.is_event_processed', {
+        contract: Buffer.from(event.contractAddress.replace('0x', ''), 'hex'),
+        event_id: eventId
+      }), (error) => error);
+
+      if (alreadyProcessed.isErr()) {
+        logger.error(`Failed to check if event is already processed`, { eventId, error: alreadyProcessed.error });
+        continue; // Skip this event but continue processing others
+      }
+
+      if (alreadyProcessed.value) {
+        logger.info(`Event already processed, skipping`, { eventId });
+        continue; // Skip this event but continue processing others
+      }
+
+      // Add the appropriate operation based on whether this is a mint or transfer
+      if (event.isMint) {
+        // Here we can safely access decimals, name, and symbol because we know isMint is true
+        const { decimals, name, symbol } = event;
+        logger.info(`Processing ERC20 mint`, {
+          eventId,
+          contractAddress: event.contractAddress,
+          amount: event.amount.toString(),
+        });
+
+        tx = gtx.addTransactionToGtx('evm.erc20.mint', [
+          event.chain,
+          event.blockNumber,
+          hexToBuffer(event.contractAddress),
+          eventId,
+          hexToBuffer(event.to),
+          event.amount,
+          decimals,
+          name,
+          symbol
+        ], tx);
+        processedAny = true;
+      } else {
+        logger.info(`Processing ERC20 transfer`, {
+          eventId,
+          contractAddress: event.contractAddress,
+          amount: event.amount.toString(),
+        });
+
+        tx = gtx.addTransactionToGtx('evm.erc20.transfer', [
+          event.chain,
+          event.blockNumber,
+          hexToBuffer(event.contractAddress),
+          eventId,
+          hexToBuffer(event.from),
+          hexToBuffer(event.to),
+          event.amount
+        ], tx);
+        processedAny = true;
+      }
     }
 
-    if (alreadyProcessed.value) {
-      return err({ type: "non_error", context: `Event already processed` });
+    // If we didn't process any events, return a non-error
+    if (!processedAny) {
+      return err({ type: "non_error", context: "All events in batch were already processed" });
     }
 
-    let tx: GTX;
-    if (selectedInput.data.isMint) {
-      // Here we can safely access decimals, name, and symbol because we know isMint is true
-      const { decimals, name, symbol } = selectedInput.data;
-
-      tx = gtx.addTransactionToGtx('evm.erc20.mint', [
-        selectedInput.data.chain,
-        selectedInput.data.blockNumber,
-        hexToBuffer(selectedInput.data.contractAddress),
-        eventId,
-        hexToBuffer(selectedInput.data.to),
-        selectedInput.data.amount,
-        decimals,
-        name,
-        symbol
-      ], emptyGtx);
-    } else {
-      tx = gtx.addTransactionToGtx('evm.erc20.transfer', [
-        selectedInput.data.chain,
-        selectedInput.data.blockNumber,
-        hexToBuffer(selectedInput.data.contractAddress),
-        eventId,
-        hexToBuffer(selectedInput.data.from),
-        hexToBuffer(selectedInput.data.to),
-        selectedInput.data.amount
-      ], emptyGtx);
-    }
-
-    tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
+    // Set the signers from all inputs
+    tx.signers = inputs.map((i) => Buffer.from(i.pubkey, 'hex'));
 
     return ok(tx);
   }
 
-  async validate(gtx: GTX, preparedData: ERC20Event): Promise<Result<GTX, OracleError>> {
+  async validate(gtx: GTX, preparedData: ERC20Event[]): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -233,7 +310,7 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
   }
 
   async execute(_gtx: GTX): Promise<Result<boolean, OracleError>> {
-    logger.debug(`Executing GTX`);
+    logger.debug(`Executing GTX with ${_gtx.operations.length} operations`);
     const client = await createClient({
       ...postchainConfig,
       directoryNodeUrlPool: this._directoryNodeUrlPool,
@@ -242,8 +319,9 @@ export class ERC20Forwarder extends Plugin<ERC20ForwarderInput, ERC20Event, GTX,
 
     try {
       await client.sendTransaction(gtx.serialize(_gtx), true, undefined, ChainConfirmationLevel.Dapp);
-      txProcessedTotal.inc({ type: "erc20" });
-      logger.info(`Executed successfully`);
+      logger.info(`Executed ${_gtx.operations.length} operations successfully`);
+      // Increment the metric for each operation
+      txProcessedTotal.inc({ type: "erc20" }, _gtx.operations.length);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
       if (error.status === 409) {
