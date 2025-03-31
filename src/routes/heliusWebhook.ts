@@ -119,6 +119,8 @@ const getTokenMints = async (): Promise<AssetInfo[]> => {
     const heliusWebhookConfig = await fetch(`${config.webhooks.helius.url}/v0/webhooks/${config.webhooks.helius.webhookId}?api-key=${config.webhooks.helius.apiKey}`)
       .then(res => res.json()) as { accountAddresses: string[] };
 
+    logger.info(`Helius webhook: Config`, { heliusWebhookConfig });
+
     const accountAddresses = heliusWebhookConfig.accountAddresses;
 
     for (const accountAddress of accountAddresses) {
@@ -136,7 +138,8 @@ const getTokenMints = async (): Promise<AssetInfo[]> => {
 
     return assets;
   } catch (error) {
-    logger.error(`Helius webhook: Failed to get contracts from directory chain`, { error });
+    logger.error(`Helius webhook: Failed to get contracts from directory chain`, error);
+    console.error(error);
     return []; // Return empty array on error
   }
 }
