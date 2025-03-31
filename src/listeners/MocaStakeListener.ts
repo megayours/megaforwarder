@@ -41,6 +41,12 @@ export class MocaStakeListener extends Listener {
 
   async run() {
     const contracts = await this.getContracts();
+
+    if (contracts.length === 0) {
+      logger.info(`MocaStakeListener: No contracts found to index`);
+      return secondsFromNow(60);
+    } 
+
     logger.info(`MocaStakeListener: Found ${contracts.length} contracts to index`);
     for (const contract of contracts) {
       const { provider } = createRandomProvider(config.rpc[contract.source] as unknown as Rpc[]);

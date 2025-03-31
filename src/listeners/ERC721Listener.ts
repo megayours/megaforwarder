@@ -52,7 +52,7 @@ export class ERC721Listener extends Listener {
     const contracts = await this.getContracts();
     if (contracts.length === 0) {
       logger.info(`ERC721Listener: No ERC721 contracts found to index`);
-      return millisecondsFromNow(this._throttleOnSuccessMs * 5); // Wait longer if no contracts
+      return secondsFromNow(60); // Wait longer if no contracts
     }
     logger.info(`ERC721Listener: Found ${contracts.length} contracts to index`);
 

@@ -4,7 +4,9 @@ import { Task } from "../core/task/Task";
 import { SolanaBalanceUpdater } from "../plugins/SolanaBalanceUpdater";
 import { logger } from "../util/monitoring";
 import type { OracleError } from "../util/errors";
-import { createCache } from "cache-manager";
+import cache from "../core/cache";
+import type { AssetInfo } from "../core/types/abstraction-chain/contract-info";
+import { createClient } from "postchain-client";
 
 type RawTokenAmount = {
   decimals: number;
@@ -28,10 +30,19 @@ type TransferData = {
   accountData: AccountData[];
 }
 
-const cache = createCache({
-  ttl: 1000 * 60 * 60 * 24,
-  nonBlocking: false,
-});
+const CACHE_KEY_TOKEN_MINTS = "solana_token_mints";
+const TOKEN_MINTS_CACHE_TTL = 60; // 60 seconds
+
+const getCachedTokenMints = async (): Promise<AssetInfo[]> => {
+  const cachedMints = await cache.get<AssetInfo[]>(CACHE_KEY_TOKEN_MINTS);
+  if (cachedMints) {
+    return cachedMints;
+  }
+
+  const mints = await getTokenMints();
+  await cache.set(CACHE_KEY_TOKEN_MINTS, mints, TOKEN_MINTS_CACHE_TTL);
+  return mints;
+};
 
 const heliusWebhook = async (req: Request) => {
   const transferData = await req.json() as TransferData[];
@@ -43,10 +54,13 @@ const heliusWebhook = async (req: Request) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  const trackedTokenMints = await getCachedTokenMints();
+  const trackedMintAddresses = trackedTokenMints.map(mint => mint.id.toLowerCase());
+
   const tokenTransfers = transferData
     .flatMap((transfer) => transfer.accountData)
     .flatMap((accountData) => accountData.tokenBalanceChanges)
-    .filter((balance) => balance.mint === "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")
+    .filter((balance) => trackedMintAddresses.includes(balance.mint.toLowerCase()))
     .filter((balance) => balance.tokenAccount !== balance.userAccount)
     .filter((balance) => balance.rawTokenAmount.tokenAmount !== "0");
 
@@ -93,5 +107,18 @@ const heliusWebhook = async (req: Request) => {
 
   return new Response("OK");
 };
+
+const getTokenMints = async (): Promise<AssetInfo[]> => {
+  try {
+    const client = await createClient({
+      directoryNodeUrlPool: config.abstractionChain.directoryNodeUrlPool,
+      blockchainRid: config.abstractionChain.blockchainRid
+    });
+    return await client.query<AssetInfo[]>('assets.get_assets_info', { source: "solana", type: "spl" });
+  } catch (error) {
+    logger.error(`Helius webhook: Failed to get contracts from directory chain`, { error });
+    return []; // Return empty array on error
+  }
+}
 
 export default heliusWebhook;

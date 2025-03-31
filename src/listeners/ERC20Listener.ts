@@ -53,7 +53,7 @@ export class ERC20Listener extends Listener {
     const contracts = await this.getContracts();
     if (contracts.length === 0) {
       logger.info(`ERC20Listener: No ERC20 contracts found to index`);
-      return millisecondsFromNow(this._throttleOnSuccessMs * 5); // Wait longer if no contracts
+      return secondsFromNow(60); // Wait longer if no contracts
     }
     logger.info(`ERC20Listener: Found ${contracts.length} contracts to index`);
     

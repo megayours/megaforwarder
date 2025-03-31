@@ -19,7 +19,7 @@ import type { OracleError } from "../util/errors";
 import { executeThrottled } from "../util/throttle";
 import { SOLANA_THROTTLE_LIMIT } from "../util/constants";
 import { postchainConfig } from "../util/postchain-config";
-import { Metaplex, keypairIdentity } from "@metaplex-foundation/js";
+import { Metaplex } from "@metaplex-foundation/js";
 
 type SolanaBalanceUpdaterInput = {
   tokenMint: string;
@@ -39,13 +39,13 @@ type SolanaBalanceUpdaterOutput = {
 export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, BalanceUpdateEvent, GTX, SolanaBalanceUpdaterOutput> {
   static readonly pluginId = "solana-balance-updater";
   private readonly _directoryNodeUrlPool: string[];
-  private readonly _megaYoursBlockchainRid: Buffer;
+  private readonly _blockchainRid: string;
 
   constructor() {
     super({ id: SolanaBalanceUpdater.pluginId });
 
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool;
-    this._megaYoursBlockchainRid = Buffer.from(config.abstractionChain.blockchainRid, "hex");
+    this._blockchainRid = config.abstractionChain.blockchainRid;
   }
 
   async prepare(input: SolanaBalanceUpdaterInput): Promise<Result<BalanceUpdateEvent, OracleError>> {
@@ -209,7 +209,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
 
     const { operation, args }: BalanceUpdateEvent = selectedData.data;
 
-    const emptyGtx = gtx.emptyGtx(this._megaYoursBlockchainRid);
+    const emptyGtx = gtx.emptyGtx(Buffer.from(this._blockchainRid, 'hex'));
     let tx = gtx.addTransactionToGtx(operation, args, emptyGtx);
     tx = gtx.addTransactionToGtx('nop', [Math.floor(Math.random() * 1000000)], tx);
     tx.signers = input.map((i) => Buffer.from(i.pubkey, 'hex'));
@@ -242,7 +242,7 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     const client = await createClient({
       ...postchainConfig,
       directoryNodeUrlPool: this._directoryNodeUrlPool,
-      blockchainRid: this._megaYoursBlockchainRid.toString('hex')
+      blockchainRid: this._blockchainRid
     });
 
     try {
@@ -278,4 +278,4 @@ export class SolanaBalanceUpdater extends Plugin<SolanaBalanceUpdaterInput, Bala
     logger.debug(`Selected RPC URL: ${rpcUrl}`);
     return rpcUrl;
   }
-} 
+}
