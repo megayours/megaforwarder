@@ -14,7 +14,7 @@ import { SolanaBalanceUpdater } from "./plugins/SolanaBalanceUpdater";
 import heliusWebhook from "./routes/heliusWebhook";
 import { AccountLinker } from "./plugins/AccountLinker";
 import { ERC721Listener } from "./listeners/ERC721Listener";
-import { EVMContractRegistration } from "./plugins/EVMContractRegistration";
+import { AssetRegistration } from "./plugins/AssetRegistration";
 import { MocaStakeListener } from "./listeners/MocaStakeListener";
 import { ERC20Listener } from "./listeners/ERC20Listener";
 import { ManageMegadata } from "./plugins/ManageMegadata";
@@ -26,7 +26,7 @@ pluginRegistry.register(new ERC20Forwarder());
 pluginRegistry.register(new MocaStakeForwarder());
 pluginRegistry.register(new SolanaBalanceUpdater());
 pluginRegistry.register(new AccountLinker());
-pluginRegistry.register(new EVMContractRegistration());
+pluginRegistry.register(new AssetRegistration());
 pluginRegistry.register(new ManageMegadata());
 
 if (config.primary) {

@@ -10,39 +10,62 @@ import { logger } from "../util/monitoring";
 import { postchainConfig } from "../util/postchain-config";
 import { validateAuth, type AccountSignature } from "../util/auth";
 
-type EVMContractRegistrationInput = {
+type AssetRegistrationInput = {
   auth: AccountSignature;
-  chain: string;
-  contract: string;
-  blockNumber: number;
-  collection: string;
+  source: string;
+  asset: string;
+  unit: number;
+  name: string;
   type: string;
 }
 
-export class EVMContractRegistration extends Plugin<EVMContractRegistrationInput, EVMContractRegistrationInput, GTX, void> {
-  static readonly pluginId = "evm-contract-registration";
+export class AssetRegistration extends Plugin<AssetRegistrationInput, AssetRegistrationInput, GTX, void> {
+  static readonly pluginId = "asset-registration";
 
   private readonly _directoryNodeUrlPool: string[];
   private readonly _blockchainRid: Buffer;
 
   constructor() {
-    super({ id: EVMContractRegistration.pluginId });
+    super({ id: AssetRegistration.pluginId });
 
     this._directoryNodeUrlPool = config.abstractionChain.directoryNodeUrlPool as string[];
     this._blockchainRid = Buffer.from(config.abstractionChain.blockchainRid as string, "hex");
   }
 
-  async prepare(input: EVMContractRegistrationInput): Promise<Result<EVMContractRegistrationInput, OracleError>> {
+  async prepare(input: AssetRegistrationInput): Promise<Result<AssetRegistrationInput, OracleError>> {
     const authResult = validateAuth(input.auth, `Asset Registration`);
     if (authResult.isErr()) {
       return err(authResult.error);
     }
 
+    // Validate has a RPC for the source
+    const rpcs = config.rpc;
+    if (!rpcs[input.source]) {
+      return err({ type: "bad_input", context: `Source ${input.source} not found in config` });
+    }
+
+    // Validate the source and type combination
+    switch (input.type) {
+      case "erc20":
+      case "erc721":
+        if (input.source !== "ethereum" && input.source !== "polygon") {
+          return err({ type: "bad_input", context: `Unsupported source and type combination: ${input.source} and ${input.type}` });
+        }
+        break;
+      case "spl":
+        if (input.source !== "solana") {
+          return err({ type: "bad_input", context: `Unsupported source and type combination: ${input.source} and ${input.type}` });
+        }
+        break;
+      default:
+        return err({ type: "bad_input", context: `Unsupported asset type: ${input.type}` });
+    }
+
     return ok(input);
   }
 
-  async process(input: ProcessInput<EVMContractRegistrationInput>[]): Promise<Result<GTX, OracleError>> {
-    logger.info(`Processing evm contract registration`);
+  async process(input: ProcessInput<AssetRegistrationInput>[]): Promise<Result<GTX, OracleError>> {
+    logger.info(`Processing asset registration`);
     const selectedData = input[0];
     if (!selectedData) {
       return err({ type: "process_error", context: "No input data" });
@@ -53,10 +76,10 @@ export class EVMContractRegistration extends Plugin<EVMContractRegistrationInput
     const emptyGtx = gtx.emptyGtx(this._blockchainRid);
     
     const tx = gtx.addTransactionToGtx("assets.register", [
-      contract.chain,
-      contract.contract,
-      contract.blockNumber,
-      contract.collection,
+      contract.source,
+      contract.asset,
+      contract.unit,
+      contract.name,
       contract.type
     ], emptyGtx);
 
@@ -65,7 +88,7 @@ export class EVMContractRegistration extends Plugin<EVMContractRegistrationInput
     return ok(tx);
   }
 
-  async validate(gtx: GTX, _: EVMContractRegistrationInput): Promise<Result<GTX, OracleError>> {
+  async validate(gtx: GTX, _: AssetRegistrationInput): Promise<Result<GTX, OracleError>> {
     const gtxBody = [gtx.blockchainRid, gtx.operations.map((op) => [op.opName, op.args]), gtx.signers] as RawGtxBody;
     const digest = getDigestToSignFromRawGtxBody(gtxBody);
     const signature = Buffer.from(ecdsaSign(digest, Buffer.from(config.privateKey, 'hex')).signature);
@@ -76,12 +99,12 @@ export class EVMContractRegistration extends Plugin<EVMContractRegistrationInput
       gtx.signatures = [signature];
     }
 
-    logger.info(`Account linker validated successfully`);
+    logger.info(`Asset registration validated successfully`);
     return ok(gtx);
   }
 
   async execute(_gtx: GTX): Promise<Result<void, OracleError>> {
-    logger.info(`Executing GTX for account linker`);
+    logger.info(`Executing GTX for asset registration`);
     const client = await createClient({
       ...postchainConfig,
       directoryNodeUrlPool: this._directoryNodeUrlPool,
@@ -94,14 +117,14 @@ export class EVMContractRegistration extends Plugin<EVMContractRegistrationInput
       if (receipt.statusCode !== 200) {
         return err({ type: "execute_error", context: receipt.status });
       }
-      logger.info(`Account linker executed successfully with txRid: ${receipt.transactionRid.toString('hex')}`);
+      logger.info(`Asset registration executed successfully with txRid: ${receipt.transactionRid.toString('hex')}`);
     } catch (error: any) {
       // Check if this is a 409 error (Transaction already in database)
       if (error.status === 409) {
         logger.info(`Transaction already in database, considering as success`);
       } else {
         // Log and return failure for any other error
-        logger.error(`Failed to link accounts:`, error);
+        logger.error(`Failed to register asset:`, error);
         return err({ type: "execute_error", context: `Error: ${error}` });
       }
     }

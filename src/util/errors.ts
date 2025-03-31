@@ -1,4 +1,5 @@
 export type OracleError =
+  | { type: 'bad_input'; context?: string }
   | { type: 'permanent_error'; context?: string }
   | { type: 'prepare_error'; context?: string }
   | { type: 'process_error'; context?: string }
