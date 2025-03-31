@@ -123,17 +123,25 @@ const getTokenMints = async (): Promise<AssetInfo[]> => {
 
     const accountAddresses = heliusWebhookConfig.accountAddresses;
 
-    for (const accountAddress of accountAddresses) {
-      const asset = assets.find(asset => asset.id.toLowerCase() === accountAddress.toLowerCase());
-      if (!asset) {
-        logger.info(`Helius webhook: Adding account address to webhook`, { accountAddress });
-        // Add account address to the webhook
-        await fetch(`${config.webhooks.helius.url}/v0/webhooks/${config.webhooks.helius.webhookId}?api-key=${config.webhooks.helius.apiKey}`, {
-          method: "PUT",
-          body: JSON.stringify({ accountAddresses: assets.map(asset => asset.id) })
-        });
-        logger.info(`Helius webhook: Added account address to webhook`, { accountAddress });
-      }
+    // Check for assets that exist in our blockchain but not in the webhook config
+    const missingAssets = assets.filter(asset => 
+      !accountAddresses.some(addr => addr.toLowerCase() === asset.id.toLowerCase())
+    );
+
+    if (missingAssets.length > 0) {
+      logger.info(`Helius webhook: Found assets not in webhook config`, { 
+        missingAssets: missingAssets.map(asset => asset.id) 
+      });
+      
+      // Update webhook with all assets from our blockchain
+      await fetch(`${config.webhooks.helius.url}/v0/webhooks/${config.webhooks.helius.webhookId}?api-key=${config.webhooks.helius.apiKey}`, {
+        method: "PUT",
+        body: JSON.stringify({ accountAddresses: assets.map(asset => asset.id) })
+      });
+      
+      logger.info(`Helius webhook: Updated webhook with all assets`, { 
+        totalAssets: assets.length 
+      });
     }
 
     return assets;
