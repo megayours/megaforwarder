@@ -35,57 +35,7 @@ if (config.primary) {
   listenerHandler.register(new ERC721Listener());
   listenerHandler.register(new ERC20Listener());
   listenerHandler.register(new MocaStakeListener());
-  // listenerHandler.register(new EVMListener({
-  //   chain: "ethereum",
-  //   contract: "0xBd3531dA5CF5857e7CfAA92426877b022e612cf8",
-  //   collection: "Pudgy Penguins",
-  //   startBlock: 12876277,
-  //   abi: erc721Abi,
-  //   type: "erc721",
-  //   filters: [
-  //     {
-  //       name: "Transfer",
-  //       filter: (contract: Contract) => contract.filters.Transfer as ContractEventName
-  //     }
-  //   ]
-  // }));
-  // listenerHandler.register(new EVMListener({
-  //   chain: "ethereum",
-  //   contract: "0xf944e35f95e819e752f3ccb5faf40957d311e8c5",
-  //   startBlock: 19729886,
-  //   abi: erc20Abi,
-  //   type: "erc20",
-  //   filters: [
-  //     {
-  //       name: "Transfer",
-  //       filter: (contract: Contract) => contract.filters.Transfer as ContractEventName
-  //     }
-  //   ]
-  // }));
-  // listenerHandler.register(new EVMListener({
-  //   chain: "ethereum",
-  //   contract: "0x9a98E6B60784634AE273F2FB84519C7F1885AeD2",
-  //   startBlock: 20260103,
-  //   abi: mocaStakeAbi,
-  //   type: "moca_stake",
-  //   filters: [
-  //     {
-  //       name: "Staked",
-  //       filter: (contract: Contract) => contract.filters.Staked as ContractEventName
-  //     },
-  //     {
-  //       name: "StakedBehalf",
-  //       filter: (contract: Contract) => contract.filters.StakedBehalf as ContractEventName
-  //     },
-  //     {
-  //       name: "Unstaked",
-  //       filter: (contract: Contract) => contract.filters.Unstaked as ContractEventName
-  //     }
-  //   ]
-  // }));
 }
-
-console.log(`Starting server on port ${config.port}`);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -161,8 +111,9 @@ const apiServer = Bun.serve({
       });
     }
 
-    if (req.method === "GET" && path === "/") {
-      return new Response(JSON.stringify({ message: "Hello, world!" }), {
+    if (req.method === "GET" && path === "/sources") {
+      const rpcs = config.rpc;
+      return new Response(JSON.stringify(Object.keys(rpcs)), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders }
       });
