@@ -114,7 +114,27 @@ const getTokenMints = async (): Promise<AssetInfo[]> => {
       directoryNodeUrlPool: config.abstractionChain.directoryNodeUrlPool,
       blockchainRid: config.abstractionChain.blockchainRid
     });
-    return await client.query<AssetInfo[]>('assets.get_assets_info', { source: "solana", type: "spl" });
+    const assets = await client.query<AssetInfo[]>('assets.get_assets_info', { source: "solana", type: "spl" });
+
+    const heliusWebhookConfig = await fetch(`${config.webhooks.helius.url}/v0/webhooks/${config.webhooks.helius.webhookId}?api-key=${config.webhooks.helius.apiKey}`)
+      .then(res => res.json()) as { accountAddresses: string[] };
+
+    const accountAddresses = heliusWebhookConfig.accountAddresses;
+
+    for (const accountAddress of accountAddresses) {
+      const asset = assets.find(asset => asset.id.toLowerCase() === accountAddress.toLowerCase());
+      if (!asset) {
+        logger.info(`Helius webhook: Adding account address to webhook`, { accountAddress });
+        // Add account address to the webhook
+        await fetch(`${config.webhooks.helius.url}/v0/webhooks/${config.webhooks.helius.webhookId}?api-key=${config.webhooks.helius.apiKey}`, {
+          method: "PUT",
+          body: JSON.stringify({ accountAddresses: assets.map(asset => asset.id) })
+        });
+        logger.info(`Helius webhook: Added account address to webhook`, { accountAddress });
+      }
+    }
+
+    return assets;
   } catch (error) {
     logger.error(`Helius webhook: Failed to get contracts from directory chain`, { error });
     return []; // Return empty array on error
