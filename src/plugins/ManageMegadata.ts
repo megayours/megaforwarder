@@ -55,17 +55,20 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
 
   async prepare(input: ManageMegadataInput): Promise<Result<ManageMegadataInput, OracleError>> {
     logger.info(`Preparing manage megadata with ${input.operations.length} operations`);
-
     const authResult = validateAuth(input.auth, `MegaData Management`);
     if (authResult.isErr()) {
       return err(authResult.error);
     }
 
+    // Create a deep copy of the input operations
+    const processedOperations: OperationInput[] = [];
+
     // TODO: Validate payments etc etc
 
     for (const operation of input.operations) {
       if (operation.operation === "create_collection") {
-        return ok(input);
+        processedOperations.push({ ...operation });
+        continue;
       } else if (operation.operation === "upsert_item") {
         const upsertItemInput = operation as UpsertItemInput;
         const { collection, tokenId } = upsertItemInput;
@@ -86,9 +89,9 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
 
         const item = await client.query<{ token_id: string }>("megadata.get_item", { collection: collectionId, token_id: tokenId });
         if (item) {
-          operation.operation = "update_item";
+          processedOperations.push({ ...operation, operation: "update_item" });
         } else {
-          operation.operation = "create_item";
+          processedOperations.push({ ...operation, operation: "create_item" });
         }
       } else if (operation.operation === "delete_item") {
         const deleteItemInput = operation as DeleteItemInput;
@@ -107,6 +110,7 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
             context: `Item ${tokenId} not found`
           });
         }
+        processedOperations.push({ ...operation });
       } else {
         return err({
           type: "validation_error",
@@ -115,7 +119,10 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
       }
     }
 
-    return ok(input);
+    return ok({
+      ...input,
+      operations: processedOperations
+    });
   }
 
   async process(input: ProcessInput<ManageMegadataInput>[]): Promise<Result<GTX, OracleError>> {
