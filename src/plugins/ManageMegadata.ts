@@ -90,8 +90,6 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
         } else {
           operation.operation = "create_item";
         }
-
-        return ok(input);
       } else if (operation.operation === "delete_item") {
         const deleteItemInput = operation as DeleteItemInput;
         const { collection, tokenId } = deleteItemInput;
@@ -109,12 +107,12 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
             context: `Item ${tokenId} not found`
           });
         }
+      } else {
+        return err({
+          type: "validation_error",
+          context: `Unsupported operation: ${operation.operation}`
+        });
       }
-
-      return err({
-        type: "validation_error",
-        context: `Unsupported operation: ${operation.operation}`
-      });
     }
 
     return ok(input);
