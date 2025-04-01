@@ -3,34 +3,38 @@ import { Plugin } from "../core/plugin/Plugin";
 import type { Result } from "neverthrow";
 import { ok, err } from "neverthrow";
 import type { OracleError } from "../util/errors";
-import type { ProcessInput } from "../core/types/Protocol";
 import { ecdsaSign } from "secp256k1";
 import config from "../config";
 import { logger } from "../util/monitoring";
 import { postchainConfig } from "../util/postchain-config";
 import { hexToBuffer } from "../util/hex";
 import { validateAuth, type AccountSignature } from "../util/auth";
+import type { ProcessInput } from "../core/types/Protocol";
 
 type Operation = "create_collection" | "upsert_item" | "create_item" | "update_item" | "delete_item";
 
 type ManageMegadataInput = {
   auth: AccountSignature;
-  operation: Operation;
+  operations: OperationInput[];
 };
 
-type CreateCollectionInput = ManageMegadataInput & {
+type OperationInput = {
+  operation: Operation;
+}
+
+type CreateCollectionInput = OperationInput & {
   operation: "create_collection";
   name: string;
 }
 
-type UpsertItemInput = ManageMegadataInput & {
+type UpsertItemInput = OperationInput & {
   operation: "upsert_item";
   collection: string;
   tokenId: string;
   properties: Record<string, any>;
 }
 
-type DeleteItemInput = ManageMegadataInput & {
+type DeleteItemInput = OperationInput & {
   operation: "delete_item";
   collection: string;
   tokenId: string;
@@ -50,7 +54,7 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
   }
 
   async prepare(input: ManageMegadataInput): Promise<Result<ManageMegadataInput, OracleError>> {
-    logger.info(`Preparing manage megadata with ${input.operation}`);
+    logger.info(`Preparing manage megadata with ${input.operations.length} operations`);
 
     const authResult = validateAuth(input.auth, `MegaData Management`);
     if (authResult.isErr()) {
@@ -59,56 +63,61 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
 
     // TODO: Validate payments etc etc
 
-    if (input.operation === "create_collection") {
-      return ok(input);
-    } else if (input.operation === "upsert_item") {
-      const upsertItemInput = input as UpsertItemInput;
-      const { collection, tokenId } = upsertItemInput;
-      const collectionId = hexToBuffer(collection);
-      const client = await createClient({
-        ...postchainConfig,
-        directoryNodeUrlPool: this._directoryNodeUrlPool,
-        blockchainRid: this._blockchainRid.toString('hex'),
-      });
-      
-      const ownerCollections = await client.query<{ id: Buffer }[]>("megadata.get_collections", { owner: input.auth.account });
-      if (!ownerCollections.some((c) => c.id.equals(collectionId))) {
-        return err({
-          type: "validation_error",
-          context: `Collection ${collection} not found`
+    for (const operation of input.operations) {
+      if (operation.operation === "create_collection") {
+        return ok(input);
+      } else if (operation.operation === "upsert_item") {
+        const upsertItemInput = operation as UpsertItemInput;
+        const { collection, tokenId } = upsertItemInput;
+        const collectionId = hexToBuffer(collection);
+        const client = await createClient({
+          ...postchainConfig,
+          directoryNodeUrlPool: this._directoryNodeUrlPool,
+          blockchainRid: this._blockchainRid.toString('hex'),
         });
+
+        const ownerCollections = await client.query<{ id: Buffer }[]>("megadata.get_collections", { owner: input.auth.account });
+        if (!ownerCollections.some((c) => c.id.equals(collectionId))) {
+          return err({
+            type: "validation_error",
+            context: `Collection ${collection} not found`
+          });
+        }
+
+        const item = await client.query<{ token_id: string }>("megadata.get_item", { collection: collectionId, token_id: tokenId });
+        if (item) {
+          operation.operation = "update_item";
+        } else {
+          operation.operation = "create_item";
+        }
+
+        return ok(input);
+      } else if (operation.operation === "delete_item") {
+        const deleteItemInput = operation as DeleteItemInput;
+        const { collection, tokenId } = deleteItemInput;
+        const collectionId = hexToBuffer(collection);
+        const client = await createClient({
+          ...postchainConfig,
+          directoryNodeUrlPool: this._directoryNodeUrlPool,
+          blockchainRid: this._blockchainRid.toString('hex'),
+        });
+
+        const item = await client.query<{ token_id: string }>("megadata.get_item", { collection: collectionId, token_id: tokenId });
+        if (!item) {
+          return err({
+            type: "validation_error",
+            context: `Item ${tokenId} not found`
+          });
+        }
       }
 
-      const item = await client.query<{ token_id: string }>("megadata.get_item", { collection: collectionId, token_id: tokenId });
-      if (item) {
-        return ok({ ...input, operation: "update_item" });
-      }
-      
-      return ok({ ...input, operation: "create_item" });
-    } else if (input.operation === "delete_item") {
-      const deleteItemInput = input as DeleteItemInput;
-      const { collection, tokenId } = deleteItemInput;
-      const collectionId = hexToBuffer(collection);
-      const client = await createClient({
-        ...postchainConfig,
-        directoryNodeUrlPool: this._directoryNodeUrlPool,
-        blockchainRid: this._blockchainRid.toString('hex'),
+      return err({
+        type: "validation_error",
+        context: `Unsupported operation: ${operation.operation}`
       });
-
-      const item = await client.query<{ token_id: string }>("megadata.get_item", { collection: collectionId, token_id: tokenId });
-      if (!item) {
-        return err({
-          type: "validation_error",
-          context: `Item ${tokenId} not found`
-        });
-      }
-      return ok(input);
     }
 
-    return err({
-      type: "validation_error",
-      context: `Unsupported operation: ${input.operation}`
-    });
+    return ok(input);
   }
 
   async process(input: ProcessInput<ManageMegadataInput>[]): Promise<Result<GTX, OracleError>> {
@@ -120,18 +129,20 @@ export class ManageMegadata extends Plugin<ManageMegadataInput, ManageMegadataIn
 
     let tx = gtx.emptyGtx(this._blockchainRid);
 
-    if (selectedData.data.operation === "create_collection") {
-      const createCollectionInput = selectedData.data as CreateCollectionInput;
-      tx = gtx.addTransactionToGtx("megadata.create_collection", [createCollectionInput.auth.account, createCollectionInput.name], tx);
-    } else if (selectedData.data.operation === "create_item") {
-      const createItemInput = selectedData.data as UpsertItemInput;
-      tx = gtx.addTransactionToGtx("megadata.create_item", [Buffer.from(createItemInput.collection, 'hex'), createItemInput.tokenId, JSON.stringify(createItemInput.properties)], tx);
-    } else if (selectedData.data.operation === "update_item") {
-      const updateItemInput = selectedData.data as UpsertItemInput;
-      tx = gtx.addTransactionToGtx("megadata.update_item", [Buffer.from(updateItemInput.collection, 'hex'), updateItemInput.tokenId, JSON.stringify(updateItemInput.properties)], tx);
-    } else if (selectedData.data.operation === "delete_item") {
-      const deleteItemInput = selectedData.data as DeleteItemInput;
-      tx = gtx.addTransactionToGtx("megadata.delete_item", [Buffer.from(deleteItemInput.collection, 'hex'), deleteItemInput.tokenId], tx);
+    for (const operation of selectedData.data.operations) {
+      if (operation.operation === "create_collection") {
+        const createCollectionInput = operation as CreateCollectionInput;
+        tx = gtx.addTransactionToGtx("megadata.create_collection", [selectedData.data.auth.account, createCollectionInput.name], tx);
+      } else if (operation.operation === "create_item") {
+        const createItemInput = operation as UpsertItemInput;
+        tx = gtx.addTransactionToGtx("megadata.create_item", [Buffer.from(createItemInput.collection, 'hex'), createItemInput.tokenId, JSON.stringify(createItemInput.properties)], tx);
+      } else if (operation.operation === "update_item") {
+        const updateItemInput = operation as UpsertItemInput;
+        tx = gtx.addTransactionToGtx("megadata.update_item", [Buffer.from(updateItemInput.collection, 'hex'), updateItemInput.tokenId, JSON.stringify(updateItemInput.properties)], tx);
+      } else if (operation.operation === "delete_item") {
+        const deleteItemInput = operation as DeleteItemInput;
+        tx = gtx.addTransactionToGtx("megadata.delete_item", [Buffer.from(deleteItemInput.collection, 'hex'), deleteItemInput.tokenId], tx);
+      }
     }
 
     tx = gtx.addTransactionToGtx("nop", [Math.floor(Math.random() * 1000000)], tx);
