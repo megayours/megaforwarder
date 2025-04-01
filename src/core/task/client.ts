@@ -5,6 +5,7 @@ import type { ProtocolPrepareResult } from "../types/Protocol";
 import type { PrepareResponse } from "../types/requests/PrepareRequest";
 import { err, ok, Result, ResultAsync } from "neverthrow";
 import type { OracleError } from "../../util/errors";
+import { logger } from "../../util/monitoring";
 
 export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Result<ProtocolPrepareResult<R>, OracleError>> => {
   const reqBody = encode(request);
@@ -30,6 +31,7 @@ export const requestPrepare = async <T, R>(peer: Peer, request: T): Promise<Resu
       })
     );
   }).andThen((resBody: PrepareResponse) => {
+    logger.info(`Prepare response from peer ${peer.oracleId}: ${JSON.stringify(resBody)}`);
     if (!resBody.encodedData) {
       return err<ProtocolPrepareResult<R>, OracleError>({
         type: 'plugin_error',
