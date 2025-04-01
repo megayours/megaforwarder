@@ -48,7 +48,7 @@ export class AssetRegistration extends Plugin<AssetRegistrationInput, AssetRegis
     switch (input.type.toLowerCase()) {
       case "erc20":
       case "erc721":
-        if (input.source !== "ethereum" && input.source !== "polygon") {
+        if (input.source !== "ethereum" && input.source !== "polygon" && input.source !== "bsc_testnet") {
           return err({ type: "bad_input", context: `Unsupported source and type combination: ${input.source} and ${input.type}` });
         }
         break;
