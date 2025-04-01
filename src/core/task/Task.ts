@@ -44,7 +44,6 @@ export class Task<T> {
       }
     });
 
-    // Add ourselves to the list of peers
     const preparePromises = peers.map(async (peer) => {
       const result = await requestPrepare<unknown, unknown>(peer, {
         pluginId: this.plugin.metadata.id,
@@ -52,6 +51,7 @@ export class Task<T> {
       });
 
       if (result.isErr()) {
+        logger.warn(`Error during prepare phase for plugin ${this.plugin.metadata.id} from peer ${peer.publicKey}: ${result.error.type} > ${result.error.context}`);
         return err(result.error);
       }
 
