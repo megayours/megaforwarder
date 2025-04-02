@@ -139,14 +139,14 @@ export class Task<T> {
     return this.plugin.execute(validatedData);
   }
 
-  async start(): Promise<Result<boolean, OracleError>> {
+  async start(): Promise<Result<T, OracleError>> {
     // Run each phase in sequence
     const prepareResultsRes = await this.runPreparePhase();
 
     if (prepareResultsRes.isErr()) {
       if (prepareResultsRes.error.type === "permanent_error") {
         logger.warn(`Permanent error during prepare phase for plugin ${this.plugin.metadata.id}`);
-        return ok(true);
+        return ok(undefined as T);
       }
       logger.error(`Error during prepare phase: ${prepareResultsRes.error.type} > ${prepareResultsRes.error.context}`);
       return err(prepareResultsRes.error);
@@ -173,6 +173,6 @@ export class Task<T> {
 
     completedTasksTotal.inc({ plugin_id: this.plugin.metadata.id });
     taskDurationTotal.observe({ plugin_id: this.plugin.metadata.id }, Date.now() - this.startTime);
-    return ok(true);
+    return ok(executeResult.value as T);
   }
 }

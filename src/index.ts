@@ -18,6 +18,8 @@ import { AssetRegistration } from "./plugins/AssetRegistration";
 import { MocaStakeListener } from "./listeners/MocaStakeListener";
 import { ERC20Listener } from "./listeners/ERC20Listener";
 import { ManageMegadata } from "./plugins/ManageMegadata";
+import { ManageQuery } from "./plugins/ManageQuery";
+import { FileUploader } from "./plugins/FileUploader";
 
 const pluginRegistry = PluginRegistry.getInstance();
 pluginRegistry.register(new SolanaMegaForwarder());
@@ -28,6 +30,8 @@ pluginRegistry.register(new SolanaBalanceUpdater());
 pluginRegistry.register(new AccountLinker());
 pluginRegistry.register(new AssetRegistration());
 pluginRegistry.register(new ManageMegadata());
+pluginRegistry.register(new ManageQuery());
+pluginRegistry.register(new FileUploader());
 
 if (config.primary) {
   const listenerHandler = ListenerRegistry.getInstance();
